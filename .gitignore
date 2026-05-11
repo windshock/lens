@@ -25,3 +25,13 @@ lib/worker.min.js
 lib/tesseract-core.wasm.js
 lib/eng.traineddata
 lib/kor.traineddata
+
+# Domain lists and local data
+*.zone
+skplanet*.txt
+phishingurls.txt
+venv.txt
+path/
+
+# Release packages
+*.zip

@@ -1,2 +1,0 @@
-http://211.188.179.86:8686/down/index.php?enc_key=33d6125795503fbb902c545cf71012f1caaeecd3
-https://multichaindappsx.pages.dev/connect
