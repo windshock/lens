@@ -1,0 +1,169 @@
+import imaplib
+import email
+from email.header import decode_header
+import re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+import time
+import openai
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
+
+# OpenAI API 키 설정
+openai.api_key = 'your_openai_api_key'
+
+# 이메일 계정 설정
+EMAIL = 'your_email@example.com'
+PASSWORD = 'your_password'
+IMAP_SERVER = 'owa.skplanet.com'
+IMAP_PORT = 993
+SMTP_SERVER = 'owa.skplanet.com'
+SMTP_PORT = 587
+
+# 내부망 IP 확인 함수
+def is_internal_ip(url):
+    try:
+        hostname = urlparse(url).hostname
+        if re.match(r"^(192\.168|10\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1]))\.\d{1,3}\.\d{1,3}$", hostname):
+            return True
+        return False
+    except Exception as e:
+        print(f"Error checking internal IP: {e}")
+        return False
+
+# 새로운 이메일을 감지하고 내용을 추출하는 함수
+def check_for_new_emails():
+    mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
+    mail.login(EMAIL, PASSWORD)
+    mail.select('inbox')
+
+    result, data = mail.search(None, 'UNSEEN')
+    email_ids = data[0].split()
+
+    emails = []
+    for email_id in email_ids:
+        result, message_data = mail.fetch(email_id, '(RFC822)')
+        raw_email = message_data[0][1]
+        msg = email.message_from_bytes(raw_email)
+
+        # 이메일 제목 디코딩
+        subject, encoding = decode_header(msg['Subject'])[0]
+        if isinstance(subject, bytes):
+            subject = subject.decode(encoding if encoding else 'utf-8')
+
+        # 이메일 본문 추출
+        if msg.is_multipart():
+            for part in msg.walk():
+                content_type = part.get_content_type()
+                content_disposition = str(part.get("Content-Disposition"))
+                try:
+                    body = part.get_payload(decode=True).decode()
+                except:
+                    pass
+                if content_type == "text/plain" and "attachment" not in content_disposition:
+                    emails.append((email_id, subject, body, raw_email))
+                    break
+        else:
+            body = msg.get_payload(decode=True).decode()
+            emails.append((email_id, subject, body, raw_email))
+    
+    mail.logout()
+    return emails
+
+# 이메일 본문에서 링크 추출하는 함수
+def extract_links(body):
+    return re.findall(r'(https?://\S+)', body)
+
+# 링크의 내용을 추출하는 함수
+def get_link_content(link):
+    try:
+        response = requests.get(link)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        return soup.get_text(separator=' ', strip=True)
+    except Exception as e:
+        print(f"Error fetching link content: {e}")
+        return ""
+
+# 링크가 피싱인지 여부와 이유를 ChatGPT에 확인하는 함수
+def check_phishing_link(link, content):
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an assistant that identifies phishing links and provides detailed reasons."},
+            {"role": "user", "content": f"Is the following link a phishing link? URL: {link}\nContent: {content}. If it is phishing, please provide detailed reasons."},
+        ],
+    )
+    result = response['choices'][0]['message']['content']
+    is_phishing = 'phishing' in result.lower()
+    return is_phishing, result
+
+# 피싱 링크를 신고하는 함수
+def report_phishing_link(link, reason, raw_email):
+    msg = MIMEMultipart()
+    msg['Subject'] = 'Phishing Link Report'
+    msg['From'] = EMAIL
+    msg['To'] = 'security@skplanet.com'
+    msg['Cc'] = EMAIL
+
+    body = MIMEText(f"A phishing link was detected: {link}\n\nReason:\n{reason}")
+    msg.attach(body)
+
+    attachment = MIMEApplication(raw_email, _subtype="octet-stream")
+    attachment.add_header('Content-Disposition', 'attachment', filename='original_email.eml')
+    msg.attach(attachment)
+
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.starttls()
+        server.login(EMAIL, PASSWORD)
+        server.sendmail(EMAIL, ['security@skplanet.com', EMAIL], msg.as_string())
+
+# 이메일 내용을 ChatGPT로 요약하는 함수
+def summarize_email(email_content):
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an assistant that summarizes emails."},
+            {"role": "user", "content": email_content},
+        ],
+    )
+    summary = response['choices'][0]['message']['content']
+    return summary
+
+# 이메일 삭제 함수
+def delete_email(email_id):
+    mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
+    mail.login(EMAIL, PASSWORD)
+    mail.select('inbox')
+    mail.store(email_id, '+FLAGS', '\\Deleted')
+    mail.expunge()
+    mail.logout()
+
+# 메인 함수
+def main():
+    print("새 이메일을 감지하는 중...")
+    while True:
+        new_emails = check_for_new_emails()
+        if new_emails:
+            for email_id, subject, body, raw_email in new_emails:
+                print(f"새 이메일: {subject}")
+                summary = summarize_email(body)
+                print(f"요약: {summary}")
+                
+                links = extract_links(body)
+                for link in links:
+                    if not is_internal_ip(link):
+                        content = get_link_content(link)
+                        is_phishing, reason = check_phishing_link(link, content)
+                        if is_phishing:
+                            print(f"피싱 링크 감지됨: {link}\n이유: {reason}")
+                            report_phishing_link(link, reason, raw_email)
+                            print(f"{link}을(를) security@skplanet.com으로 신고했습니다.")
+                            delete_email(email_id)
+                            print(f"피싱 이메일이 삭제되었습니다: {subject}")
+        time.sleep(60)  # 60초마다 새로운 이메일 확인
+
+if __name__ == "__main__":
+    main()
