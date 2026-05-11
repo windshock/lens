@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>피싱 검사기</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; width: 320px; margin: 0; padding: 12px; }
+    h1 { font-size: 13px; margin: 0 0 8px; }
+    .status { font-size: 12px; padding: 6px 8px; border-radius: 6px; margin-bottom: 8px; }
+    .status.ok { background: #d1fae5; color: #064e3b; }
+    .status.dl { background: #fef3c7; color: #78350f; }
+    .status.no { background: #fee2e2; color: #7f1d1d; }
+    .url { font-size: 11px; word-break: break-all; color: #555; margin: 6px 0; }
+    button { width: 100%; padding: 8px; border: 0; border-radius: 6px; background: #1f6feb; color: #fff; font-size: 13px; cursor: pointer; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    .verdict { margin-top: 10px; padding: 8px; border-radius: 6px; font-size: 12px; }
+    .v-ok     { background: #d1fae5; color: #064e3b; }
+    .v-warn   { background: #fef3c7; color: #78350f; }
+    .v-danger { background: #fee2e2; color: #7f1d1d; }
+    .reason { white-space: pre-wrap; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>피싱 링크 검사기</h1>
+  <div id="status" class="status">상태 확인 중…</div>
+  <div class="url" id="url"></div>
+  <button id="scan" disabled>현재 페이지 검사</button>
+  <div id="result"></div>
+  <script src="popup.js"></script>
+</body>
+</html>

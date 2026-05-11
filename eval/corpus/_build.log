@@ -1,0 +1,46 @@
+=== Tranco top-1m 수집 ===
+  fetching https://tranco-list.eu/top-1m.csv.zip …
+  pool: 1000000 rows
+  apex whitelist (Tranco top-10k): 9714 domains
+
+=== Phishing.Database 수집 ===
+  pool: 789052 URLs → 436841 unique hosts → 322418 after apex filter (skipped 114423 legit-looking)
+
+=== Phish 코퍼스 빌드 (target=100) ===
+  Chrome corpus-check launched, port 9333
+  [  1/100] miss  raw=  13 alive=1 blk=0 err=0  http://twitterdmsx.nylaproductions.com/?q=q2xhexrvbkbyzxrpcmv0zxrvbi5jb20=
+  [  2/100] miss  raw=  21 alive=2 blk=0 err=0  https://vmfwp7ffeljk5u5ezym1ltu7.qwo231sdx.club/index/usps/index.html
+  [  3/100] miss  raw=  40 alive=3 blk=0 err=0  https://icscards.2kyactt.com
+  [  4/100] miss  raw=  47 alive=4 blk=0 err=0  http://financehead.com/dfold/off-vl
+  [  5/100] miss  raw=  54 alive=5 blk=0 err=0  http://skill-meta.com
+  [  6/100] miss  raw=  81 alive=6 blk=0 err=0  http://tp784.app
+  [  7/100] miss  raw= 132 alive=7 blk=0 err=0  https://z26lkwwsy1.qwo231sdx.club/index/usps/index.html
+  [  8/100] miss  raw= 134 alive=8 blk=0 err=0  https://iw9xi3iyszchoo15famfu5zjn4l1xe.qwo231sdx.club/index/usps/index.html
+  [  9/100] miss  raw= 158 alive=9 blk=0 err=0  https://thaneydesign.wixstudio.io/gemini
+  [ 10/100] miss  raw= 166 alive=10 blk=0 err=0  http://web13236.cweb06.gamingcontrol.de
+  [ 11/100] miss  raw= 173 alive=11 blk=0 err=0  https://mifqv.blogspot.fi
+  [ 12/100] miss  raw= 189 alive=12 blk=0 err=0  http://www.acuitynv.com/1drivec
+  [ 13/100] miss  raw= 211 alive=13 blk=0 err=0  http://tdxwblwyb.weiyikuai.top
+  [ 14/100] miss  raw= 313 alive=15 blk=1 err=0  https://mjkvf.blogspot.lu
+  [ 15/100] miss  raw= 317 alive=16 blk=1 err=0  http://uoys.gemsters.com
+  [ 16/100] miss  raw= 381 alive=17 blk=1 err=0  https://samaeitambaraca.com.br/no/pakk/manage/payment.php
+  [ 17/100] miss  raw= 397 alive=18 blk=1 err=0  https://uniswap.imdev.works
+  [ 18/100] miss  raw= 402 alive=19 blk=1 err=0  https://c8a301p7etzh2pgedygbcvesq.qwo231sdx.club/index/usps/index.html
+  [ 19/100] miss  raw= 449 alive=21 blk=1 err=1  http://ybeyyt6ndyd.blogspot.co.za/2024/03/ggggggg.html
+  [ 20/100] miss  raw= 451 alive=22 blk=1 err=1  https://omniscoloris.fr/orders/hmrc
+  [ 21/100] miss  raw= 459 alive=23 blk=1 err=1  https://xhlk.net
+  [ 22/100] miss  raw= 495 alive=25 blk=2 err=1  https://reefcharities.com/rb/index.php
+  [ 23/100] miss  raw= 508 alive=26 blk=2 err=1  https://livelo.app
+  [ 24/100] miss  raw= 519 alive=28 blk=3 err=1  https://uhome.ru/wp-content/home
+  [ 25/100] miss  raw= 572 alive=29 blk=3 err=1  https://web6118.web07.bero-webspace.de
+  [ 26/100] miss  raw= 590 alive=31 blk=3 err=2  https://gnhtq.blogspot.sn
+  [ 27/100] miss  raw= 598 alive=32 blk=3 err=2  https://intermatico-ds.webcindario.com
+  [ 28/100] miss  raw= 613 alive=33 blk=3 err=2  http://ironart.net///modules/jmsslider/views/img/layers/packages/ii/?email=donald@trump.co
+  [ 29/100] miss  raw= 627 alive=34 blk=3 err=2  https://out-tourneys.ocry.com
+  [ 30/100] miss  raw= 633 alive=35 blk=3 err=2  https://videosvirar.easy.co/dw6rbrdxbsilqwzih8zdwp?_fb_noscript=1
+  [ 31/100] miss  raw= 660 alive=36 blk=3 err=2  http://theboxingcircle.com
+  [ 32/100] miss  raw= 669 alive=37 blk=3 err=2  https://wbrif6.qwo231sdx.club/index/usps/index.html
+  [ 33/100] miss  raw= 677 alive=39 blk=4 err=2  http://web8579.web07.bero-webspace.de
+  [ 34/100] miss  raw= 678 alive=40 blk=4 err=2  https://fsv4ut.qwo231sdx.club/index/usps/index.html
+  [ 35/100] miss  raw= 702 alive=42 blk=5 err=2  https://nfgjt.blogspot.lu
+  [ 36/100] miss  raw= 708 alive=43 blk=5 err=2  https://q2rohmioq9f28hfkrpeaeeaezyr.qwo231sdx.club/index/usps/index.html

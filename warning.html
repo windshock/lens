@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>피싱 의심 페이지</title>
+  <link rel="stylesheet" href="warning.css">
+</head>
+<body>
+  <main class="container">
+    <div class="shield" aria-hidden="true">
+      <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+        <path d="M12 2 L4 5 v6 c0 5 3.5 9 8 11 4.5-2 8-6 8-11 V5 z" stroke-linejoin="round"/>
+        <line x1="9"  y1="9"  x2="15" y2="15" stroke-linecap="round"/>
+        <line x1="15" y1="9"  x2="9"  y2="15" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <h1>이 페이지는 피싱으로 의심됩니다</h1>
+    <p class="subtitle">계정 탈취·금전 피해 위험이 있습니다. 가능한 한 접근하지 마세요.</p>
+
+    <section class="card">
+      <div class="row"><span class="label">URL</span><code id="url" class="value mono"></code></div>
+      <div class="row"><span class="label">위험도</span><span id="score" class="value score"></span></div>
+      <div class="row"><span class="label">브랜드</span><span id="brand" class="value"></span></div>
+      <div class="row reason-row"><span class="label">사유</span><p id="reason" class="value reason"></p></div>
+    </section>
+
+    <div class="actions">
+      <button id="back" class="primary">안전하게 돌아가기</button>
+      <button id="proceed" class="ghost">이 세션 동안 허용 후 계속</button>
+    </div>
+
+    <p class="footnote">
+      이 경고는 Chrome 내장 Gemini Nano 온디바이스 분석에 따른 추정치입니다.
+      <br>오탐일 수 있으며, 의심스럽다면 IT 보안 담당자에게 문의하세요.
+    </p>
+  </main>
+  <script src="warning.js"></script>
+</body>
+</html>

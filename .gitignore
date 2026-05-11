@@ -1,0 +1,27 @@
+# Python caches / local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+path/to/venv/
+
+# Node / temporary vendor install used by lib/README.md
+node_modules/
+npm-debug.log*
+
+# macOS / editor noise
+.DS_Store
+*.swp
+*.swo
+
+# Generated evaluation artifacts
+eval/runs/
+eval/corpus/.phishing_db.cache.txt
+eval/corpus/.tranco.cache.csv
+
+# Locally vendored OCR runtime assets. See lib/README.md.
+lib/tesseract.min.js
+lib/worker.min.js
+lib/tesseract-core.wasm.js
+lib/eng.traineddata
+lib/kor.traineddata

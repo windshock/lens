@@ -1,0 +1,75 @@
+{
+  "manifest_version": 3,
+  "name": "ScamGuard AI",
+  "version": "0.1.5",
+  "description": "Chrome 내장 Gemini Nano 기반 100% 온디바이스(Zero-Data) 피싱 및 스캠 탐지기.",
+  "minimum_chrome_version": "138",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "현재 페이지 피싱 검사",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "contextMenus",
+    "tabs",
+    "scripting",
+    "storage",
+    "notifications",
+    "offscreen",
+    "downloads",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://owa.skplanet.com/*"
+      ],
+      "js": [
+        "owa_scan.js"
+      ],
+      "css": [
+        "owa_banner.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "click_guard.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/tesseract.min.js",
+        "lib/worker.min.js",
+        "lib/tesseract-core.wasm.js",
+        "lib/eng.traineddata",
+        "lib/kor.traineddata",
+        "clipboard_hook.js",
+        "offscreen.html",
+        "verdict.html",
+        "verdict.js",
+        "warning.html",
+        "warning.js",
+        "warning.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

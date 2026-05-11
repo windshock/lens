@@ -1,0 +1,65 @@
+[
+  {
+    "name": "localhost-benign-fixture",
+    "url": "http://127.0.0.1:8765/benign_fixture.html",
+    "expectedPhishing": false,
+    "maxScore": 0,
+    "notes": "localhost는 INTERNAL_DOMAINS이므로 모델 호출 없이 auto-safe"
+  },
+  {
+    "name": "localhost-danger-fixture",
+    "url": "http://127.0.0.1:8765/danger_fixture.html",
+    "expectedPhishing": true,
+    "minScore": 9,
+    "notes": "localhost라도 위험 URI/ClickFix 쉘 페이로드가 있으면 internal auto-safe를 우회"
+  },
+  {
+    "name": "google-safe",
+    "url": "https://www.google.com",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "가장 기본적인 정상 사이트"
+  },
+  {
+    "name": "nextjs-safe",
+    "url": "https://nextjs.org",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "Vercel/Next.js 공식 — 브랜드 미식별 시 모델 판정 — 정상 브랜드 정식 도메인"
+  },
+  {
+    "name": "xpm-docs-safe",
+    "url": "https://xpack.github.io/xpm/docs/install/",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "github.io 정상 문서 — FP 위험지대"
+  },
+  {
+    "name": "deepseek-official-safe",
+    "url": "https://chat.deepseek.com",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "진짜 DeepSeek 공식 도메인"
+  },
+  {
+    "name": "claude-official-safe",
+    "url": "https://claude.ai",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "진짜 Claude 공식 도메인"
+  },
+  {
+    "name": "workers-dev-notebooklm-phish",
+    "url": "https://dawn-snowflake-c5fe.emily-young1995.workers.dev",
+    "expectedPhishing": true,
+    "minScore": 7,
+    "notes": "NotebookLM 사칭 — workers.dev (O1)"
+  },
+  {
+    "name": "pages-dev-deepseek-phish",
+    "url": "https://project-deepsk530291kx.pages.dev",
+    "expectedPhishing": true,
+    "minScore": 7,
+    "notes": "DeepSeek 사칭 — pages.dev (O1)"
+  }
+]
