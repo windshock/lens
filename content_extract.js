@@ -55,11 +55,8 @@
     collectClipboardWriteLiterals(src, "inlineScriptLiteral");
   }
 
-  // 1) 잡음 태그 제거(원본 DOM 변형 — 어차피 탭은 곧 닫힘)
-  const dropTags = ["script", "style", "noscript", "svg", "iframe", "link", "meta"];
-  for (const t of dropTags) {
-    document.querySelectorAll(t).forEach(n => n.remove());
-  }
+  // 1) 잡음 태그 제거 제거됨 (사용자 활성 탭에 주입되므로 DOM을 파괴하면 안 됨)
+  // document.body.innerText는 원래 script/style 내용을 무시하므로 삭제할 필요가 없습니다.
 
   // 2) form 직렬화
   const forms = [...document.querySelectorAll("input,textarea,form,select,button")]
