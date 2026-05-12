@@ -1,3 +1,11 @@
+# ScamGuard AI v0.1.6 Release Notes
+
+## 🚀 What's New in v0.1.6 (Stealth Mode Update)
+- **Invisible Background Scanning**: Eliminates the annoying flickering of hidden tabs! Navigation and manual scans now seamlessly inject analysis scripts into active tabs, while background automated scans (e.g., OWA emails) operate completely silently via static HTML fetching.
+- **Improved Active Tab Safety**: Fixed an issue where the extension inadvertently cleared scripts and styles from the user's active page during scanning. The extension now safely analyzes live pages without modifying or breaking the user's view.
+
+---
+
 # ScamGuard AI v0.1.5 Release Notes
 
 ## 🚀 Welcome to ScamGuard AI!
