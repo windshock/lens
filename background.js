@@ -349,6 +349,8 @@ async function extractFromUrl(url, source, meta) {
     } catch(e) {
       console.warn("Direct injection failed:", e);
     }
+    // 주입 실패(예: chrome:// URL) 시에도 절대 숨김 탭으로 폴백하지 않음
+    return { finalUrl: url, forms: [], anchors: [], imgs: [], visibleText: "", behaviors: {} };
   }
 
   // 2. 백그라운드 자동 스캔 (OWA 메일 자동 검사 등) - 창을 띄우지 않고 fetch로 정적 파싱
@@ -359,8 +361,10 @@ async function extractFromUrl(url, source, meta) {
       const parsed = await sendToOffscreen({ type: "PARSE_STATIC_HTML", html, url: res.url });
       if (parsed) return parsed;
     } catch(e) {
-      console.warn("Fetch failed:", e);
+      console.warn("Fetch failed for OWA link:", e);
     }
+    // OWA 백그라운드 스캔은 절대 숨김 탭(창)을 띄워서는 안 되므로, 실패 시에도 기본 빈 객체 반환
+    return { finalUrl: url, forms: [], anchors: [], imgs: [], visibleText: "", behaviors: {} };
   }
 
   // 3. 명시적 수동 검사 (우클릭 등) 또는 폴백 - 기존처럼 숨김 탭 열어서 완벽한 동적 검사

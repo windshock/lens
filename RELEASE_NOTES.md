@@ -1,3 +1,10 @@
+# ScamGuard AI v0.1.8 Release Notes
+
+## 🚀 What's New in v0.1.8
+- **Strict Silent Mode**: Fixed an edge case where OWA background scans or navigation scans would incorrectly fall back to opening a visible popup tab if the network request or code injection failed. Now, all automated background scans are strictly enforced to remain completely silent under all circumstances.
+
+---
+
 # ScamGuard AI v0.1.7 Release Notes
 
 ## 🚀 What's New in v0.1.7
