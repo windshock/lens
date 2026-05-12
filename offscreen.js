@@ -125,6 +125,89 @@ function parseWhois(html) {
   }
 }
 
+function parseStaticHtml(html, base) {
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    
+    // drop tags
+    ["script", "style", "noscript", "svg", "iframe", "link", "meta"].forEach(t => {
+      doc.querySelectorAll(t).forEach(n => n.remove());
+    });
+
+    const serializeFormElement = (el) => {
+      const tag = el.tagName.toLowerCase();
+      const attrs = ["name", "type", "placeholder", "value", "action", "method", "id"];
+      const pairs = attrs.map(k => [k, el.getAttribute(k)]).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}="${String(v).slice(0, 60)}"`);
+      return `<${tag} ${pairs.join(" ")}>`;
+    };
+
+    const forms = [...doc.querySelectorAll("input,textarea,form,select,button")].slice(0, 40).map(serializeFormElement);
+    
+    const anchors = [];
+    const dangerousUris = [];
+    const execDownloads = [];
+    const seenAnchor = new Set();
+    const DANGEROUS_URI = /^(applescript|ms-msdt|ms-msvr|ms-search|search-ms|shell|vbscript|jar|chrome|about):/i;
+    const EXEC_EXT = /\.(exe|dmg|pkg|msi|bat|cmd|ps1|vbs|jar|scr|hta|app|command|scpt|sh|run|deb|rpm|appimage)(\?|$)/i;
+
+    for (const a of doc.querySelectorAll("a[href]")) {
+      const href = a.getAttribute("href") || "";
+      let absoluteHref = href;
+      try { absoluteHref = new URL(href, base).href; } catch {}
+      
+      if (DANGEROUS_URI.test(href)) {
+        dangerousUris.push(`${href} (${(a.textContent || "").trim().slice(0, 60)})`);
+        continue;
+      }
+      if (EXEC_EXT.test(absoluteHref) || a.hasAttribute("download")) {
+        execDownloads.push(`${absoluteHref} (${(a.textContent || "").trim().slice(0, 60)})`);
+      }
+      if (!/^https?:/i.test(absoluteHref)) continue;
+      if (seenAnchor.has(absoluteHref)) continue;
+      seenAnchor.add(absoluteHref);
+      anchors.push(`${absoluteHref} | ${(a.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80)}`);
+      if (anchors.length >= 40) break;
+    }
+
+    const imgs = [];
+    for (const img of doc.querySelectorAll("img")) {
+      const src = img.getAttribute("src");
+      if (!src) continue;
+      try { imgs.push(new URL(src, base).href); } catch {}
+      if (imgs.length >= 12) break;
+    }
+
+    const visibleText = (doc.body ? doc.body.textContent : "").replace(/\s+/g, " ").trim();
+
+    // extract social hits & shell hits
+    const SOCIAL_RE = new RegExp("(?:win\\s*\\+\\s*r|⊞\\s*\\+?\\s*r|press\\s+(?:ctrl|cmd|⊞)\\s*\\+\\s*\\w|i\\W?m\\s+not\\s+a\\s+robot|verify\\s+you\\s+are\\s+human|cloudflare\\s+(?:verification|challenge)|복사\\s*(?:후|해|하)|붙여넣|터미널|보안\\s*확인|click\\s+(?:below|to\\s+verify|here\\s+to)|paste\\s+(?:into|in\\s+the)|open\\s+(?:powershell|terminal|run|cmd))", "i");
+    const SHELL_HINT_RE = /\b(powershell|invoke-?webrequest|invoke-?expression|\biex\b|mshta|cmd\.exe|curl\s+[^|]+\|\s*(?:bash|sh|zsh)|wget\s+[^|]+\|\s*(?:bash|sh|zsh)|eval\s*\(|base64\s+-d|chmod\s+\+x|tr\s+['"][^'"]+['"]\s+['"][^'"]+['"])/i;
+    
+    const socialHits = (visibleText.match(new RegExp(SOCIAL_RE.source, "gi")) || []).slice(0, 8).map(m => m.toLowerCase());
+    const shellHits = (visibleText.match(new RegExp(SHELL_HINT_RE.source, "gi")) || []).slice(0, 8);
+
+    return {
+      finalUrl: base,
+      title: doc.title || "",
+      forms,
+      anchors,
+      imgs,
+      visibleText,
+      behaviors: {
+        clipboardWrites: [],
+        dangerousUris,
+        execDownloads,
+        socialHits,
+        shellHits,
+        copyButtons: [],
+        codeSnippets: []
+      }
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 // ───────────────────────── 아이콘 생성 (OffscreenCanvas) ─────────────────────────
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -206,6 +289,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "WHOIS_PARSE") {
     try { sendResponse(parseWhois(msg.html)); }
     catch (e) { sendResponse(""); }
+    return false;
+  }
+  if (msg.type === "PARSE_STATIC_HTML") {
+    sendResponse(parseStaticHtml(msg.html, msg.url));
     return false;
   }
   if (msg.type === "GENERATE_ICONS") {

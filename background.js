@@ -337,7 +337,37 @@ function waitForTabComplete(tabId) {
 const scanningTabs = new Map(); // tabId → { autoDownloads:[] }
 const navigationScans = new Map(); // tabId → { url, at }
 
-async function extractFromUrl(url) {
+async function extractFromUrl(url, source, meta) {
+  // 1. 활성 탭 주입 (navigation, popup, download) - 스크롤/클릭 봇 동작 없이 조용히 추출
+  if ((source === "navigation" || source === "popup" || source === "download-silent-ok") && meta?.tabId != null && meta.tabId >= 0) {
+    try {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: meta.tabId },
+        files: ["content_extract.js"]
+      });
+      if (result?.result) return result.result;
+    } catch(e) {
+      console.warn("Direct injection failed:", e);
+    }
+  }
+
+  // 2. 백그라운드 자동 스캔 (OWA 메일 자동 검사 등) - 창을 띄우지 않고 fetch로 정적 파싱
+  if (source === "owa") {
+    try {
+      const res = await fetch(url, { redirect: "follow", credentials: "omit" });
+      const html = await res.text();
+      const parsed = await sendToOffscreen({ type: "PARSE_STATIC_HTML", html, url: res.url });
+      if (parsed) return parsed;
+    } catch(e) {
+      console.warn("Fetch failed:", e);
+    }
+  }
+
+  // 3. 명시적 수동 검사 (우클릭 등) 또는 폴백 - 기존처럼 숨김 탭 열어서 완벽한 동적 검사
+  return await extractFromHiddenTab(url);
+}
+
+async function extractFromHiddenTab(url) {
   // Hidden scan tab을 URL에 `#__pg_scan=1` 마커를 박아서 연다.
   // 페이지에 로드된 click_guard.js가 이 마커를 동기적으로 보고 비활성화 →
   // cascade loop(스캔 tab의 click_guard가 또 스캔 트리거하는 무한반복) 차단.
@@ -490,7 +520,7 @@ async function scanUrl(url, source, meta = {}) {
   }
   let extracted, ocr = "", whois = "WHOIS lookup skipped";
   try {
-    extracted = await extractFromUrl(url);
+    extracted = await extractFromUrl(url, source, meta);
     if (!extracted) extracted = { finalUrl: url, forms: [], anchors: [], imgs: [], visibleText: "" };
     if (internalDomain && !hasInternalBypassRisk(extracted)) {
       const safe = {
