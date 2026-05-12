@@ -1,3 +1,10 @@
+# ScamGuard AI v0.1.7 Release Notes
+
+## 🚀 What's New in v0.1.7
+- **OWA SPA Bug Fix**: Fixed an issue in OWA where the "Click to navigate" summary bar would incorrectly accumulate counts from previously viewed emails and fail to scroll. It now correctly identifies dangerous links only within the currently visible email panel.
+
+---
+
 # ScamGuard AI v0.1.6 Release Notes
 
 ## 🚀 What's New in v0.1.6 (Stealth Mode Update)

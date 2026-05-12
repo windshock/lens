@@ -65,9 +65,6 @@
     }
   }, 30000);
 
-  // 위험 anchor 카운터 (anchorId 별로 1회만 카운트)
-  const dangerAnchors = new Set();
-
   function findPanelFor(anchor) {
     let n = anchor;
     while (n && n !== document.body) {
@@ -77,16 +74,26 @@
     return document.querySelector(PANEL_SELECTORS) || document.body;
   }
 
-  function ensureSummaryBar(panel, count) {
-    let bar = panel.querySelector(":scope > .pg-summary");
+  function updateSummaryBar(panel) {
+    const dangerBadges = panel.querySelectorAll(".pg-badge.pg-danger");
+    const count = dangerBadges.length;
+    let bar = panel.querySelector(".pg-summary.pg-danger");
+
+    if (count === 0) {
+      if (bar) bar.remove();
+      return;
+    }
+
     if (!bar) {
       bar = document.createElement("div");
       bar.className = "pg-summary pg-danger";
       bar.setAttribute("role", "alert");
       bar.addEventListener("click", () => {
-        const id = [...dangerAnchors][0];
-        const a = id != null ? anchorMap.get(id) : null;
-        if (a) a.scrollIntoView({ behavior: "smooth", block: "center" });
+        // 스크롤 시 현재 패널 내의 첫 번째 위험 배지로 이동 (SPA 특성상 기존 노드 참조 방지)
+        const firstBadge = panel.querySelector(".pg-badge.pg-danger");
+        if (firstBadge) {
+          firstBadge.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
       });
       panel.prepend(bar);
     }
@@ -98,6 +105,10 @@
     if (msg?.type !== "verdict-banner" || msg.anchorId == null) return;
     const a = anchorMap.get(msg.anchorId);
     if (!a) return;
+    
+    // SPA 특성상 a가 이미 DOM에서 제거되었을 수 있음 (이전 메일)
+    if (!document.body.contains(a)) return;
+
     // 이미 배너 붙어있으면 갱신
     let badge = a.nextElementSibling;
     if (!badge || !badge.classList || !badge.classList.contains("pg-badge")) {
@@ -105,23 +116,22 @@
       badge.className = "pg-badge";
       a.insertAdjacentElement("afterend", badge);
     }
+    
     const cls = msg.severity === "danger" ? "pg-danger"
               : msg.severity === "warn"   ? "pg-warn"
               : "pg-ok";
     const label = msg.severity === "danger" ? "피싱 의심"
                 : msg.severity === "warn"   ? "주의"
                 : "안전";
+                
     badge.classList.remove("pg-ok", "pg-warn", "pg-danger");
     badge.classList.add(cls);
     const score = msg.verdict?.phishing_score;
     badge.textContent = ` [${label}${score != null ? " " + score : ""}]`;
     badge.title = msg.verdict?.reason || "";
 
-    // 위험 anchor 누적 → 호스트 panel 상단에 요약 바
-    if (msg.severity === "danger" && !dangerAnchors.has(msg.anchorId)) {
-      dangerAnchors.add(msg.anchorId);
-      const panel = findPanelFor(a);
-      ensureSummaryBar(panel, dangerAnchors.size);
-    }
+    // 요약 바 업데이트
+    const panel = findPanelFor(a);
+    updateSummaryBar(panel);
   });
 })();
