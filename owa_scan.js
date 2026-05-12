@@ -28,6 +28,15 @@
     } catch { return false; }
   }
 
+  // 이메일 보안 솔루션들이 흔히 저지르는 "수신거부/승인 자동 클릭" 문제를 방지하기 위한 정규식
+  const SENSITIVE_ACTION_RE = /(unsubscribe|opt-?out|수신\s*거부|수신거부|탈퇴|해지|confirm|verify|approve|reject|password|reset|auth|login|signin|sign-up|token=|code=)/i;
+
+  function isSensitiveAction(href, text) {
+    if (SENSITIVE_ACTION_RE.test(href)) return true;
+    if (text && SENSITIVE_ACTION_RE.test(text)) return true;
+    return false;
+  }
+
   function scanRoot(root) {
     const panes = root.querySelectorAll ? root.querySelectorAll(PANEL_SELECTORS) : [];
     const containers = panes.length > 0 ? panes : [root];
@@ -37,11 +46,26 @@
         const href = a.href;
         if (!isExternal(href)) continue;
         if (seen.has(href + "|" + a.dataset.pgScanId)) continue;
+        
         const id = ++anchorSeq;
         a.dataset.pgScanId = String(id);
         anchorMap.set(id, a);
         const key = href + "|" + id;
         seen.add(key);
+
+        const text = a.innerText || a.textContent || "";
+        if (isSensitiveAction(href, text)) {
+          // 민감한 1회성 액션 링크는 백그라운드 자동 fetch 시 실제 동작(수신거부 등)이 트리거될 수 있으므로 스캔 보류
+          let badge = document.createElement("span");
+          badge.className = "pg-badge pg-sensitive";
+          badge.textContent = " [스캔 보류 (민감 링크)]";
+          badge.title = "수신 거부, 인증, 비밀번호 재설정 등 1회성 동작 링크일 수 있어 자동 스캔을 생략했습니다. 검사하려면 우클릭을 사용하세요.";
+          badge.style.color = "#888";
+          badge.style.fontSize = "0.9em";
+          a.insertAdjacentElement("afterend", badge);
+          continue;
+        }
+
         chrome.runtime.sendMessage({ type: "scan", url: href, source: "owa", anchorId: id });
       }
     }

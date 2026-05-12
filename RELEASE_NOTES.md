@@ -1,3 +1,10 @@
+# ScamGuard AI v0.1.9 Release Notes
+
+## 🚀 What's New in v0.1.9
+- **Sensitive Action Link Safeguard**: Implemented a critical safety feature to prevent the automatic background scanner from blindly fetching 1-time action links. Links containing keywords like "unsubscribe", "opt-out", "verify", "approve", or "password reset" are now explicitly skipped during automated OWA scanning to prevent accidentally triggering these actions on behalf of the user. These links will display a `[스캔 보류 (민감 링크)]` badge and can still be manually scanned via right-click if deemed suspicious.
+
+---
+
 # ScamGuard AI v0.1.8 Release Notes
 
 ## 🚀 What's New in v0.1.8
