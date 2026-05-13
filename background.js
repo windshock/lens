@@ -89,6 +89,9 @@ const PROMPT_OUTPUT_RESERVE = 512;
 
 let _session = null;
 let _availability = null;
+let _sessionPromise = null;
+let _downloadProgress = null;
+let _modelError = null;
 
 // ───────────────────────── LanguageModel session ─────────────────────────
 
@@ -106,25 +109,67 @@ async function checkAvailability() {
   return _availability;
 }
 
-async function ensureSession() {
-  if (_session) return _session;
-  const a = await checkAvailability();
-  if (a === "unavailable") throw new Error("Gemini Nano 사용 불가");
-  _session = await LanguageModel.create({
-    initialPrompts: [{ role: "system", content: SYS }],
-    temperature: 0,
-    topK: 1,
-    monitor(m) {
-      m.addEventListener("downloadprogress", e => {
-        console.log(`LM download: ${e.loaded}/${e.total}`);
-      });
-    }
-  });
-  return _session;
+function modelStatus() {
+  return {
+    availability: _availability,
+    preparing: !!_sessionPromise && !_session,
+    progress: _downloadProgress,
+    error: _modelError
+  };
 }
 
-async function updateBadge() {
-  const a = await checkAvailability();
+async function ensureSession() {
+  if (_session) return _session;
+  if (_sessionPromise) return _sessionPromise;
+
+  _sessionPromise = (async () => {
+    const a = await checkAvailability();
+    if (a === "unavailable") throw new Error("Gemini Nano 사용 불가");
+
+    _modelError = null;
+    if (a === "downloadable" || a === "downloading") {
+      _availability = "downloading";
+      _downloadProgress = { loaded: 0, total: 1 };
+      await applyBadgeState(_availability);
+    }
+
+    const session = await LanguageModel.create({
+      initialPrompts: [{ role: "system", content: SYS }],
+      temperature: 0,
+      topK: 1,
+      monitor(m) {
+        m.addEventListener("downloadprogress", e => {
+          _availability = "downloading";
+          _downloadProgress = {
+            loaded: typeof e.loaded === "number" ? e.loaded : 0,
+            total: typeof e.total === "number" ? e.total : 1
+          };
+          console.log(`LM download: ${e.loaded}/${e.total}`);
+          applyBadgeState(_availability).catch(() => {});
+        });
+      }
+    });
+
+    _session = session;
+    _availability = "available";
+    _downloadProgress = null;
+    await applyBadgeState(_availability);
+    return _session;
+  })();
+
+  try {
+    return await _sessionPromise;
+  } catch (e) {
+    _sessionPromise = null;
+    _session = null;
+    _modelError = String(e?.message || e);
+    _downloadProgress = null;
+    await updateBadge();
+    throw e;
+  }
+}
+
+async function applyBadgeState(a) {
   if (a === "available") {
     chrome.action.setBadgeText({ text: "" });
     chrome.action.setTitle({ title: "현재 페이지 피싱 검사" });
@@ -137,6 +182,11 @@ async function updateBadge() {
     chrome.action.setBadgeText({ text: "X" });
     chrome.action.setTitle({ title: "온디바이스 모델 사용 불가" });
   }
+}
+
+async function updateBadge() {
+  const a = await checkAvailability();
+  await applyBadgeState(a);
 }
 
 // ───────────────────────── Offscreen document ─────────────────────────
@@ -497,10 +547,6 @@ async function scanUrl(url, source, meta = {}) {
   if (!url || !/^https?:/i.test(url)) {
     return { error: "scannable_url_required" };
   }
-  const a = await checkAvailability();
-  if (a !== "available") {
-    return { error: "model_unavailable", availability: a };
-  }
   const internalDomain = isInternalDomain(url);
   const bypassLookup = !!meta?.bypassCache || isLoopbackUrl(url);
   const key = "v:" + (await sha256Hex(url));
@@ -549,6 +595,16 @@ async function scanUrl(url, source, meta = {}) {
     console.warn("extract/whois/ocr failed:", e);
     extracted = extracted || { finalUrl: url, forms: [], anchors: [], imgs: [], visibleText: "" };
   }
+
+  const a = await checkAvailability();
+  if (a === "unavailable") {
+    return { error: "model_unavailable", availability: a };
+  }
+  const canStartDownload = new Set(["popup", "contextMenu", "click-guard"]).has(source);
+  if (a !== "available" && !canStartDownload) {
+    return { error: "model_download_required", availability: a };
+  }
+
   const session = await ensureSession();
   const body = await buildPrompt(session, extracted.finalUrl || url, ocr, whois, extracted);
   let raw;
@@ -985,12 +1041,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg?.type === "scan" && msg.url) {
     const source = msg.source || "popup";
-    const meta = { tabId: sender.tab?.id, anchorId: msg.anchorId, bypassCache: !!msg.bypassCache };
+    const tabId = sender.tab?.id ?? (Number.isInteger(msg.tabId) ? msg.tabId : undefined);
+    const meta = { tabId, anchorId: msg.anchorId, bypassCache: !!msg.bypassCache };
     scanUrl(msg.url, source, meta).then(sendResponse).catch(e => sendResponse({ error: String(e) }));
     return true; // async
   }
   if (msg?.type === "availability") {
-    checkAvailability().then(sendResponse);
+    checkAvailability().then(a => sendResponse({ ...modelStatus(), availability: a }));
+    return true;
+  }
+  if (msg?.type === "prepare-model") {
+    ensureSession()
+      .then(() => sendResponse(modelStatus()))
+      .catch(e => sendResponse({ ...modelStatus(), error: String(e?.message || e) }));
+    return true;
+  }
+  if (msg?.type === "model-status") {
+    sendResponse(modelStatus());
     return true;
   }
   if (msg?.type === "diagnostics") {

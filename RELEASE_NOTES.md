@@ -1,3 +1,11 @@
+# ScamGuard AI v0.1.10 Release Notes
+
+## 🚀 What's New in v0.1.10
+- **Automatic Gemini Nano Preparation**: Opening the popup now triggers `LanguageModel.create()` when the model is `downloadable` or `downloading`, so the on-device model download actually starts instead of waiting for a forced scan.
+- **Fullscreen Warning Fix from Popup Scans**: Popup-triggered scans now pass the active tab ID to the service worker, so dangerous pages are redirected to the red warning screen instead of falling back to a desktop notification.
+
+---
+
 # ScamGuard AI v0.1.9 Release Notes
 
 ## 🚀 What's New in v0.1.9
