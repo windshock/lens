@@ -66,27 +66,29 @@
 
   // 한 페이지에서 같은 사유 반복 차단 막기 (사용자가 "그래도 진행" 클릭 시)
   const allowedClicks = new WeakSet();
-  // 최근 스캔 결과 캐시(같은 페이지면 재요청 안 함)
-  let lastVerdictAt = 0;
+  // 최근 스캔 결과 캐시 — URL이 바뀌지 않는 한 영구. SPA 라우팅 등 URL 변경 시 무효화.
   let lastVerdict = null;
+  let lastVerdictUrl = null;
   // 현재 in-flight 스캔(같은 페이지에서 동시 다중 클릭 막음)
   let inflight = null;
 
   async function quickScanCurrentPage() {
-    if (lastVerdict && Date.now() - lastVerdictAt < 60_000) return lastVerdict;
+    if (lastVerdict && lastVerdictUrl === location.href) return lastVerdict;
     if (inflight) return inflight;
+    const scanUrl = location.href;
     inflight = (async () => {
       try {
+        // bypassCache 안 보냄 → SW의 chrome.storage.session 캐시 활용 (세션 동안 동일 URL 재호출 0회).
         const v = await chrome.runtime.sendMessage({
           type: "scan",
-          url: location.href,
-          source: "click-guard",
-          bypassCache: true
+          url: scanUrl,
+          source: "click-guard"
         });
-        lastVerdict = v; lastVerdictAt = Date.now();
+        if (location.href === scanUrl) {
+          lastVerdict = v; lastVerdictUrl = scanUrl;
+        }
         return v;
       } catch { return null; }
-      finally { /* clear after promise resolved below */ }
     })();
     try { return await inflight; }
     finally { inflight = null; }
