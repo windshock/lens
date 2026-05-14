@@ -19,13 +19,6 @@ eval/runs/
 eval/corpus/.phishing_db.cache.txt
 eval/corpus/.tranco.cache.csv
 
-# Locally vendored OCR runtime assets. See lib/README.md.
-lib/tesseract.min.js
-lib/worker.min.js
-lib/tesseract-core.wasm.js
-lib/eng.traineddata
-lib/kor.traineddata
-
 # Domain lists and local data
 *.zone
 skplanet*.txt

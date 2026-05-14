@@ -32,8 +32,8 @@ scamguard-ai/
 ├── verdict.html / verdict.js  # 알림 클릭 → 최근 verdict 상세 (게이지+시그널+세션 허용)
 ├── warning.html/.js/.css      # 위험 페이지 가로채기 화면 (탭이 자동 전환됨)
 ├── lib/
-│   ├── README.md              # Tesseract.js 벤더링 가이드 (PoC라 바이너리 미커밋)
-│   └── tesseract.min.js, worker.min.js, tesseract-core.wasm.js, eng.traineddata, kor.traineddata  ← 사용자가 직접 배치
+│   ├── README.md              # Tesseract.js 벤더링 가이드 (업그레이드 시에만 참조)
+│   └── tesseract.min.js, worker.min.js, tesseract-core.wasm.js, eng.traineddata, kor.traineddata  ← 저장소에 포함됨 (MV3 정책상 CDN 로드 불가)
 ├── icons/
 │   └── README.md              # 런타임 생성됨, 수동 배치 불필요
 │
@@ -58,7 +58,7 @@ scamguard-ai/
 ### 사전 준비 (1회)
 1. Chrome stable ≥ 138 (`chrome://version`)
 2. `chrome://on-device-internals` → "Optimization Guide On Device Model" `Available` 확인. `Pending` 이면 Chrome 켜둔 채 ~10분 대기 (약 2GB 다운로드).
-3. `lib/README.md` 따라 Tesseract.js 파일 5개(eng+kor.traineddata 포함) 배치. (아이콘은 자동 생성됨 — 별도 작업 불필요)
+3. `lib/` 의 Tesseract.js 파일 5개(eng+kor.traineddata 포함)는 저장소에 포함되어 있어 별도 배치 불필요. 업그레이드 시에만 `lib/README.md` 참조. (아이콘은 런타임 생성됨)
 
 ### 로드
 4. `chrome://extensions` → Developer mode ON → **Load unpacked** → 이 디렉터리 선택.
