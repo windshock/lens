@@ -36,7 +36,27 @@
     "open\\s+(?:powershell|terminal|run|cmd))",
     "i"
   );
-  const SHELL_HINT_RE = /\b(powershell|invoke-?webrequest|invoke-?expression|\biex\b|mshta|cmd\.exe|curl\s+[^|]+\|\s*(?:bash|sh|zsh)|wget\s+[^|]+\|\s*(?:bash|sh|zsh)|eval\s*\(|base64\s+-d|chmod\s+\+x|tr\s+['"][^'"]+['"]\s+['"][^'"]+['"])/i;
+
+  // 단어 하나짜리 powershell/cmd/curl 은 뉴스·문서·채팅 UI에서 너무 흔해 FP를 만든다.
+  // 실행 의도가 보이는 옵션/파이프/다운로드/난독화 패턴만 shellHits/codeSnippets 후보로 사용한다.
+  const SHELL_EXEC_RE = new RegExp(
+    "(?:" +
+      "\\bpowershell(?:\\.exe)?\\s+(?:-[a-z]+|/[a-z]+|iex\\b|iwr\\b|irm\\b|invoke-|encodedcommand\\b|enc\\b|nop\\b|w\\s+hidden)" +
+      "|\\bpwsh(?:\\.exe)?\\s+(?:-[a-z]+|/[a-z]+|iex\\b|iwr\\b|irm\\b|invoke-|encodedcommand\\b|enc\\b|nop\\b|w\\s+hidden)" +
+      "|\\binvoke-?webrequest\\b" +
+      "|\\binvoke-?expression\\b" +
+      "|\\biex\\s*(?:\\(|\\$|\\()" +
+      "|\\bmshta\\s+(?:https?://|javascript:|vbscript:)" +
+      "|\\bcmd\\.exe\\s+/(?:c|k)\\b" +
+      "|\\bcurl\\s+[^|]{1,300}\\|\\s*(?:bash|sh|zsh)\\b" +
+      "|\\bwget\\s+[^|]{1,300}\\|\\s*(?:bash|sh|zsh)\\b" +
+      "|\\beval\\s*\\(" +
+      "|\\bbase64\\s+-d\\b" +
+      "|\\bchmod\\s+\\+x\\b" +
+      "|\\btr\\s+['\"][^'\"]+['\"]\\s+['\"][^'\"]+['\"]" +
+    ")",
+    "i"
+  );
 
   // clipboard.writeText literal 추출(static fallback, 후크 못 잡은 경우 대비)
   const staticClipboardWrites = [];
@@ -95,7 +115,10 @@
   }
 
   // 5) visible body text
-  const visibleText = ((document.body && document.body.innerText) || "")
+  // SPA/채팅 서비스의 좌측 사이드바·히스토리·내비게이션 단어가 shellHits로 섞이는 것을 줄이기 위해
+  // 본문 영역(main/article/role=main)을 우선 사용한다. 없으면 기존처럼 body로 폴백한다.
+  const textRoot = document.querySelector("main, article, [role='main']") || document.body;
+  const visibleText = ((textRoot && textRoot.innerText) || "")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -104,11 +127,11 @@
   const shellHits = [];
   const socialMatches = visibleText.match(new RegExp(SOCIAL_RE.source, "gi")) || [];
   for (const m of socialMatches.slice(0, 8)) socialHits.push(m.toLowerCase());
-  const shellMatches = visibleText.match(new RegExp(SHELL_HINT_RE.source, "gi")) || [];
+  const shellMatches = visibleText.match(new RegExp(SHELL_EXEC_RE.source, "gi")) || [];
   for (const m of shellMatches.slice(0, 8)) shellHits.push(m);
 
   // 7) copy 버튼 휴리스틱
-  const copyButtons = [];
+  const copyButtonsRaw = [];
   for (const el of document.querySelectorAll('button, [role="button"], a[onclick]')) {
     const t = ((el.innerText || el.textContent || "") + " " + (el.getAttribute("aria-label") || "")).trim();
     const onclick = el.getAttribute("onclick") || "";
@@ -116,8 +139,8 @@
       collectClipboardWriteLiterals(onclick, "onclickLiteral");
       const label = t || "(no label)";
       const detail = onclick ? `${label} | onclick=${onclick}` : label;
-      copyButtons.push(detail.slice(0, 320));
-      if (copyButtons.length >= 8) break;
+      copyButtonsRaw.push(detail.slice(0, 320));
+      if (copyButtonsRaw.length >= 8) break;
     }
   }
 
@@ -131,7 +154,7 @@
     if (!t) continue;
     // 너무 긴 블록은 앞부분만 (난독화도 앞부분에 단서가 많은 편)
     const s = t.length > 1200 ? (t.slice(0, 1200) + " …") : t;
-    if (SHELL_HINT_RE.test(s) || /\bcurl\b|\bwget\b|\bpowershell\b|\birm\b|\biex\b/i.test(s)) {
+    if (SHELL_EXEC_RE.test(s)) {
       codeSnippets.push(s);
       if (codeSnippets.length >= 8) break;
     }
@@ -139,6 +162,12 @@
 
   // 8) clipboard 버퍼 + 인라인 정적 literal 머지
   const clipboardWrites = [...readClipboardBuffer(), ...staticClipboardWrites].slice(0, 20);
+
+  // copyButtons는 실제 클립보드 payload/명령 스니펫/사회공학 문구가 있을 때만 의미 있는 보조 신호다.
+  // 일반 사이트의 "Copy" UI만으로는 모델이 ClickFix 신호처럼 과대해석하므로 비운다.
+  const copyButtons = (clipboardWrites.length > 0 || codeSnippets.length > 0 || socialHits.length > 0)
+    ? copyButtonsRaw
+    : [];
 
   // SW가 hidden tab 열 때 박아둔 `#__pg_scan=1` 마커는 finalUrl 에서 제거.
   const cleanUrl = location.href.replace(/(?:[#&])__pg_scan=1\b/, "").replace(/#$/, "");
