@@ -110,6 +110,56 @@
     setTimeout(() => { div?.remove(); }, 8000);
   }
 
+  // ── prefetch: 페이지에 실제로 검사 트리거가 될 만한 요소(Copy 버튼/다운로드 링크/위험 URI)가
+  // 있을 때만 백그라운드 사전 스캔을 1회 시작. 사용자가 실제 클릭할 때 첫 스캔 대기(수십초)를 제거.
+  // 무관한 페이지에선 LLM 호출 0회를 유지한다.
+  function pagePotentiallyNeedsScan() {
+    let n = 0;
+    for (const el of document.querySelectorAll('a[href], button, [role="button"], a[onclick]')) {
+      if (++n > 300) break;
+      const txt = ((el.innerText || el.textContent || "") + " " + (el.getAttribute?.("aria-label") || "")).trim();
+      if (STRICT_COPY_HINT_RE.test(txt)) return true;
+      const onclick = el.getAttribute?.("onclick") || "";
+      if (/clipboard\.writeText|execCommand\(['"]copy/i.test(onclick)) return true;
+      if (el.tagName === "A") {
+        const href = el.href || el.getAttribute?.("href") || "";
+        if (DANGEROUS_URI_RE.test(href) || EXEC_EXT_RE.test(href) || el.hasAttribute("download")) return true;
+      }
+    }
+    return false;
+  }
+
+  function schedulePrefetch() {
+    if (lastVerdict && lastVerdictUrl === location.href) return;
+    if (inflight) return;
+    if (!pagePotentiallyNeedsScan()) return;
+    quickScanCurrentPage().catch(() => {});
+  }
+
+  function scheduleWhenIdle() {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(() => schedulePrefetch(), { timeout: 2500 });
+    } else {
+      setTimeout(schedulePrefetch, 800);
+    }
+  }
+
+  // SPA 라우팅(pushState/replaceState/popstate/hashchange)으로 URL 변경 시
+  // 캐시 무효화 + 재프리페치. ISOLATED world라서 history 함수 오버라이드는 페이지 코드에 안 박혀,
+  // popstate/hashchange + 폴링 보조로 처리.
+  let __pgLastHref = location.href;
+  function onPossibleNavigation() {
+    if (location.href === __pgLastHref) return;
+    __pgLastHref = location.href;
+    lastVerdict = null;
+    lastVerdictUrl = null;
+    scheduleWhenIdle();
+  }
+  window.addEventListener("popstate", onPossibleNavigation);
+  window.addEventListener("hashchange", onPossibleNavigation);
+  // pushState/replaceState 는 isolated world에서 직접 hook 못 함 — 2.5s 폴링으로 보완.
+  setInterval(onPossibleNavigation, 2500);
+
   // install() 를 별도 함수로 두는 이유 사라짐 — 동기 install.
   (function install() {
     document.addEventListener("click", async (ev) => {
@@ -136,7 +186,9 @@
       // scan severity: capture 단계에서 일단 막고, 빠른 스캔 후 결정
       ev.preventDefault();
       ev.stopImmediatePropagation();
-      showInlineWarning(`이 페이지를 검사 중입니다… (${cls.reason})`);
+      // 캐시 hit이면 banner 없이 즉시 처리 (사용자에게 굳이 "검사 중" 안 보여줌)
+      const cached = (lastVerdict && lastVerdictUrl === location.href);
+      if (!cached) showInlineWarning(`이 페이지를 검사 중입니다… (${cls.reason})`);
       const v = await quickScanCurrentPage();
       if (v && (v.phishing || (v.phishing_score ?? 0) >= 7)) {
         showInlineWarning(`피싱 의심 페이지 — 클릭 차단됨. 사유: ${(v.reason || "").slice(0, 160)}`);
@@ -153,5 +205,7 @@
       ev.target.click?.();
     }, true /* capture */);
     console.log("[pg click_guard] installed on", location.href);
+    // 첫 프리페치: 페이지 로드가 안정된 뒤(idle) 실행.
+    scheduleWhenIdle();
   })();
 })();
