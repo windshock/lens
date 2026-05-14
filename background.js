@@ -364,12 +364,16 @@ async function loadDenylist() {
 }
 async function isDenylisted(host) {
   if (!host) return false;
+  // 사설 IP 는 denylist 매칭 대상에서 제외 — 과거에 잘못 기록된 entry 도 자동 inert 처리.
+  if (isPrivateIp(host)) return false;
   const h = await sha256Hex(host.toLowerCase());
   const set = await loadDenylist();
   return set.has(h);
 }
 async function addToDenylist(host) {
   if (!host) return;
+  // 사설 IP 는 영구 기록 자체를 거부.
+  if (isPrivateIp(host)) return;
   const h = await sha256Hex(host.toLowerCase());
   const set = await loadDenylist();
   if (set.has(h)) return;
@@ -421,7 +425,35 @@ function registeredDomain(url) {
   } catch { return null; }
 }
 
+// RFC1918 IPv4 (10/8, 172.16/12, 192.168/16) + loopback (127/8) + link-local (169.254/16)
+// + IPv6 loopback (::1) + ULA (fc00::/7) + link-local (fe80::/10).
+// 사설 IP 자체로는 브랜드 사칭 판정의 의미가 거의 없고 hidden scan tab 이 인증·VPN 으로
+// 실패하기 쉬워, internal 로 묶어 LLM 호출과 denylist 기록에서 전부 제외한다.
+function isPrivateIp(host) {
+  if (!host) return false;
+  const h = String(host).toLowerCase().replace(/^\[|\]$/g, "");
+  const m4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m4) {
+    const o = m4.slice(1).map(Number);
+    if (o.some(x => x > 255)) return false;
+    if (o[0] === 10) return true;
+    if (o[0] === 127) return true;
+    if (o[0] === 169 && o[1] === 254) return true;
+    if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+    if (o[0] === 192 && o[1] === 168) return true;
+    return false;
+  }
+  if (h === "::1") return true;
+  if (/^fe[89ab]/.test(h)) return true; // fe80::/10 link-local
+  if (/^f[cd]/.test(h)) return true;    // fc00::/7 unique-local
+  return false;
+}
+
 function isInternalDomain(url) {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    if (isPrivateIp(h)) return true;
+  } catch {}
   const d = registeredDomain(url);
   return d ? INTERNAL_DOMAINS.includes(d) : false;
 }

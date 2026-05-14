@@ -1,3 +1,24 @@
+# ScamGuard AI v0.1.14 Release Notes
+
+## 🔧 Skip private IPs · Sync stale OWA summary bars
+
+Two bug fixes triggered by real reports.
+
+### Private IPs are no longer scanned
+Before this release, `isInternalDomain` only matched the hostname against the static `INTERNAL_DOMAINS` list, so something like `http://172.29.247.33:8080/` (RFC1918 space) bypassed the internal short-circuit, went all the way through Gemini Nano, was flagged 9/10 phishing for "IP on non-standard port + WHOIS failed + login form", and got persisted into the denylist. Subsequent visits to the same intranet host kept hitting the warning page.
+
+- New helper `isPrivateIp(host)` covers IPv4 RFC1918 (10/8, 172.16/12, 192.168/16) plus loopback (127/8) and link-local (169.254/16), and IPv6 loopback (`::1`), ULA (`fc00::/7`), and link-local (`fe80::/10`).
+- `isInternalDomain` now returns true for any private-IP host, so the existing internal-short-circuit handles intranet pages: extract DOM → check `hasInternalBypassRisk` → skip the LLM if nothing dangerous.
+- Defense-in-depth: `addToDenylist` refuses to record private IPs, and `isDenylisted` returns false for them — so any private-IP hash that was already stored from earlier versions becomes inert without needing a migration step.
+
+### OWA summary bar stays in sync across email switches
+The red "⚠ 이 메일에 피싱 의심 링크 N개" bar was prepended to OWA's reading-pane element when a dangerous link was detected, but the bar was only recomputed inside the verdict-banner handler. When the user switched to a different email (an OWA SPA navigation that replaces the inner item content), the badges vanished but the parent pane survived — and so did the stale red bar, with no new verdict to clear it.
+
+- New `syncAllSummaryBars()` walks every live `.pg-summary.pg-danger`, re-counts its parent pane's danger badges, and removes the bar (or updates the count) accordingly.
+- Hooked into both the MutationObserver (catches email switches) and the verdict-banner handler (catches verdicts arriving after a panel changes).
+
+---
+
 # ScamGuard AI v0.1.13 Release Notes
 
 ## ✨ Allowlist UX Overhaul

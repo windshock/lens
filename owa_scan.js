@@ -73,6 +73,7 @@
 
   const observer = new MutationObserver(() => {
     scanRoot(document.body);
+    syncAllSummaryBars();
   });
   observer.observe(document.body, { childList: true, subtree: true });
   // 초기 1회
@@ -124,6 +125,26 @@
     bar.textContent = `⚠ 이 메일에 피싱 의심 링크 ${count}개 — 클릭하여 위치로 이동`;
   }
 
+  // OWA SPA 가 메일 본문을 갈아끼우면 위험 배지들은 DOM 에서 사라지지만, 부모 패널에
+  // prepend 했던 .pg-summary 바는 그대로 남아 "이전 메일의 경고" 가 새 메일에서 계속
+  // 보이는 버그가 발생한다. 매 mutation 과 verdict 후에 살아있는 모든 summary 를 다시
+  // 세어 0 이면 제거하여 동기화한다.
+  function syncAllSummaryBars() {
+    document.querySelectorAll(".pg-summary.pg-danger").forEach((bar) => {
+      const panel = bar.parentElement;
+      if (!panel || !document.body.contains(panel)) {
+        bar.remove();
+        return;
+      }
+      const count = panel.querySelectorAll(".pg-badge.pg-danger").length;
+      if (count === 0) {
+        bar.remove();
+      } else {
+        bar.textContent = `⚠ 이 메일에 피싱 의심 링크 ${count}개 — 클릭하여 위치로 이동`;
+      }
+    });
+  }
+
   // verdict 회신 → 배너 + 요약 바
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type !== "verdict-banner" || msg.anchorId == null) return;
@@ -154,8 +175,9 @@
     badge.textContent = ` [${label}${score != null ? " " + score : ""}]`;
     badge.title = msg.verdict?.reason || "";
 
-    // 요약 바 업데이트
+    // 요약 바 업데이트 + 다른 패널에 남아있는 stale summary 도 함께 정리
     const panel = findPanelFor(a);
     updateSummaryBar(panel);
+    syncAllSummaryBars();
   });
 })();
