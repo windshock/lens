@@ -788,6 +788,26 @@ async function scanUrl(url, source, meta = {}) {
       await dispatchResult(source, url, cached, { ...meta, cached: true });
       return cached;
     }
+    // 세션 단위 자동 신뢰 도메인(safeDomains) — 이전 검사에서 O1-safe/O5/O6 단독 발동했고
+    // 위험 오버라이드가 없었던 도메인. 같은 도메인의 다른 URL도 추출/LLM 생략하고 안전 처리.
+    try {
+      const reg = registeredDomain(url);
+      if (reg) {
+        const { safeDomains = [] } = await chrome.storage.session.get("safeDomains");
+        if (safeDomains.includes(reg)) {
+          const safeBySession = {
+            phishing_score: 0, brand: null, phishing: false,
+            suspicious_domain: false,
+            reason: `세션 신뢰 도메인 — 이 세션의 이전 검사에서 안전 판정 (${reg})`,
+            url, ts: Date.now()
+          };
+          await cacheSet(key, safeBySession);
+          await chrome.storage.session.set({ lastVerdict: safeBySession });
+          await dispatchResult(source, url, safeBySession, { ...meta, sessionTrustedDomain: true });
+          return safeBySession;
+        }
+      }
+    } catch {}
     // 영구 denylist hit — LLM/추출/OCR 전부 생략하고 phishing 으로 short-circuit.
     try {
       const host = new URL(url).hostname.toLowerCase();
@@ -1243,6 +1263,28 @@ async function applyOverrides(verdict, extracted, url) {
     const suppressModelReason = overrides.some(o => o.suppressModelReason) && !overrides.some(o => o.sev === "danger");
     verdict.reason = suppressModelReason ? prefix : prefix + (verdict.reason || "");
     console.log("applyOverrides:", overrides);
+  }
+
+  // 세션 자동 신뢰 도메인 마킹 — 도메인 화이트리스트 기반 안전 판정(O1-safe/O5/O6)만 발동했고
+  // 위험 시그널이 전혀 없을 때만. 콘텐츠 시그널(예: 클립보드 셸 페이로드)이 잡혔다면 트러스트 안 함.
+  // 이후 같은 도메인의 다른 URL은 scanUrl 상단에서 LLM 호출 없이 short-circuit.
+  const DOMAIN_TRUST_RULES = new Set(["O1-safe", "O5", "O6"]);
+  const hasDomainTrustRule = overrides.some(o => DOMAIN_TRUST_RULES.has(o.rule));
+  const hasAnyDanger = overrides.some(o => o.sev === "danger");
+  if (hasDomainTrustRule && !hasAnyDanger) {
+    try {
+      const reg = registeredDomain(extracted?.finalUrl || url);
+      if (reg) {
+        const { safeDomains = [] } = await chrome.storage.session.get("safeDomains");
+        if (!safeDomains.includes(reg)) {
+          safeDomains.push(reg);
+          // 너무 비대해지지 않게 200개 한도(LRU 비슷, 오래된 게 앞).
+          while (safeDomains.length > 200) safeDomains.shift();
+          await chrome.storage.session.set({ safeDomains });
+          console.log("safeDomains added:", reg, "(total", safeDomains.length, ")");
+        }
+      }
+    } catch {}
   }
 }
 
