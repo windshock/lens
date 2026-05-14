@@ -378,6 +378,32 @@ async function addToDenylist(host) {
   console.log("denylist += host (hash:", h.slice(0, 12) + "…)");
 }
 
+// ───────────────────────── 영구 allowlist (host 단위) ─────────────────────────
+// 사용자가 warning.html 또는 verdict.html 에서 "허용" 한 호스트를 chrome.storage.local 에
+// 평문 host 로 보관(URL hash 가 아니라 host 그대로 — 쿼리/패스 변형에도 안정적으로 일치).
+// 확장 자동 업데이트·SW 재시작·브라우저 재시작에 살아남음. Remove → Load unpacked 만 소실.
+let _allowlistCache = null;
+async function loadAllowlist() {
+  if (_allowlistCache) return _allowlistCache;
+  const { allowlistHosts = [] } = await chrome.storage.local.get("allowlistHosts");
+  _allowlistCache = new Set(allowlistHosts);
+  return _allowlistCache;
+}
+async function isAllowlisted(host) {
+  if (!host) return false;
+  const set = await loadAllowlist();
+  return set.has(host.toLowerCase());
+}
+async function addToAllowlist(host) {
+  if (!host) return;
+  const h = host.toLowerCase();
+  const set = await loadAllowlist();
+  if (set.has(h)) return;
+  set.add(h);
+  await chrome.storage.local.set({ allowlistHosts: [...set] });
+  console.log("allowlist += host:", h);
+}
+
 function registeredDomain(url) {
   try {
     const h = new URL(url).hostname;
@@ -713,11 +739,13 @@ async function scanUrl(url, source, meta = {}) {
   const key = "v:" + (await sha256Hex(url));
   // 평가 사이클용 bypassCache 플래그 — 캐시·allowlist 우회.
   if (!bypassLookup) {
-    const { allowlist = [] } = await chrome.storage.session.get("allowlist");
-    if (allowlist.includes(key)) {
+    let allowlistHost = "";
+    try { allowlistHost = new URL(url).hostname.toLowerCase(); } catch {}
+    if (allowlistHost && await isAllowlisted(allowlistHost)) {
       const allowed = {
         phishing_score: 0, brand: null, phishing: false,
-        suspicious_domain: false, reason: "사용자가 이 세션에서 허용함",
+        suspicious_domain: false,
+        reason: `사용자가 이 호스트(${allowlistHost})를 허용함`,
         url, ts: Date.now()
       };
       await dispatchResult(source, url, allowed, { ...meta, allowed: true });
@@ -1386,13 +1414,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg?.type === "allowlist" && msg.url) {
     (async () => {
-      const k = "v:" + (await sha256Hex(msg.url));
-      const { allowlist = [] } = await chrome.storage.session.get("allowlist");
-      if (!allowlist.includes(k)) {
-        allowlist.push(k);
-        await chrome.storage.session.set({ allowlist });
-      }
-      sendResponse({ ok: true });
+      let host;
+      try { host = new URL(msg.url).hostname.toLowerCase(); }
+      catch { sendResponse({ ok: false, error: "invalid_url" }); return; }
+      if (!host) { sendResponse({ ok: false, error: "empty_host" }); return; }
+      await addToAllowlist(host);
+      sendResponse({ ok: true, host });
     })();
     return true;
   }

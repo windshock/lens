@@ -58,7 +58,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","
     <div class="reason">${esc(v.reason || "")}</div>
 
     <div class="actions">
-      <button id="allow" class="warn">이 세션 동안 허용</button>
+      <button id="allow" class="warn">이 사이트 허용</button>
       <button id="close">닫기</button>
     </div>
 
@@ -69,8 +69,11 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","
   document.getElementById("close").addEventListener("click", () => window.close());
   document.getElementById("allow").addEventListener("click", async () => {
     if (!v.url) return;
-    if (!confirm("이 세션 동안 이 URL을 더 이상 검사하지 않습니다. 진행할까요?")) return;
-    await chrome.runtime.sendMessage({ type: "allowlist", url: v.url });
-    alert("허용 등록되었습니다. (브라우저 종료 시 해제)");
+    let host = "";
+    try { host = new URL(v.url).hostname; } catch {}
+    const hostLabel = host ? `사이트 ${host}` : "이 사이트";
+    if (!confirm(`${hostLabel} 의 모든 페이지를 앞으로 검사하지 않습니다. 이 설정은 확장을 재설치하기 전까지 유지됩니다. 진행할까요?`)) return;
+    const res = await chrome.runtime.sendMessage({ type: "allowlist", url: v.url });
+    alert(res?.host ? `${res.host} 허용 등록되었습니다.` : "허용 등록되었습니다.");
   });
 })();

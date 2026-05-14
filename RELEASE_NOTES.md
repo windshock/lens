@@ -1,3 +1,15 @@
+# ScamGuard AI v0.1.13 Release Notes
+
+## ✨ Allowlist UX 개선
+
+v0.1.12 까지 allowlist 는 **풀 URL 의 sha256 해시 단위 + 세션 스코프** 였습니다. 그 결과 `app.any.run?_gl=...&register` 처럼 트래킹 파라미터가 붙은 URL 을 한 번 허용해도, 다음 방문에 파라미터가 한 글자라도 다르면 다시 빨간 화면이 떴고, 브라우저를 종료하면 모든 허용 기록이 사라졌습니다.
+
+- **호스트 단위 allowlist**: 사용자가 `app.any.run` 의 어떤 페이지든 한 번 허용하면, 같은 호스트의 모든 경로·쿼리 변형이 자동으로 허용됩니다. 서브도메인(`report.any.run` 등)은 별도 — 보안과 편의의 균형.
+- **영구 저장 (`chrome.storage.local`)**: denylist 와 동일한 저장소로 옮겨 확장 자동 업데이트·SW 재시작·브라우저 재시작에 살아남도록 했습니다. 완전 Remove → Load unpacked 만 소실.
+- **UI 텍스트 변경**: warning.html / verdict.html 의 버튼·confirm 문구를 "사이트 단위 + 영구" 로 일관되게 표기.
+
+---
+
 # ScamGuard AI v0.1.12 Release Notes
 
 ## 🔒 Security Hardening

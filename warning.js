@@ -41,7 +41,10 @@ async function init() {
 
   $("proceed").addEventListener("click", async () => {
     if (!url) return;
-    const ok = confirm("이 페이지가 안전하다고 직접 확인했습니까?\n허용 시 이 브라우저 세션 동안 같은 URL은 더 이상 검사하지 않습니다.");
+    let host = "";
+    try { host = new URL(url).hostname; } catch {}
+    const hostLabel = host ? `사이트 ${host}` : "이 사이트";
+    const ok = confirm(`이 페이지가 안전하다고 직접 확인했습니까?\n허용 시 ${hostLabel} 의 모든 페이지는 앞으로 검사하지 않습니다. 이 설정은 확장을 재설치하기 전까지 유지됩니다.`);
     if (!ok) return;
     await chrome.runtime.sendMessage({ type: "allowlist", url });
     location.replace(url); // history 한 칸 줄임
