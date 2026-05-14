@@ -351,6 +351,33 @@ async function sha256Hex(s) {
   return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
+// ───────────────────────── 영구 denylist ─────────────────────────
+// phishing(score>=7) 으로 확정된 호스트를 chrome.storage.local 에 sha256 hash 로 보관.
+// 확장 자동 업데이트·SW 재시작·브라우저 재시작에 살아남아 O5/O6 우회를 봉쇄하고
+// 재방문 시 LLM 호출을 생략(short-circuit). Remove → Load unpacked 만 소실.
+let _denylistCache = null;
+async function loadDenylist() {
+  if (_denylistCache) return _denylistCache;
+  const { phishingDenylist = [] } = await chrome.storage.local.get("phishingDenylist");
+  _denylistCache = new Set(phishingDenylist);
+  return _denylistCache;
+}
+async function isDenylisted(host) {
+  if (!host) return false;
+  const h = await sha256Hex(host.toLowerCase());
+  const set = await loadDenylist();
+  return set.has(h);
+}
+async function addToDenylist(host) {
+  if (!host) return;
+  const h = await sha256Hex(host.toLowerCase());
+  const set = await loadDenylist();
+  if (set.has(h)) return;
+  set.add(h);
+  await chrome.storage.local.set({ phishingDenylist: [...set] });
+  console.log("denylist += host (hash:", h.slice(0, 12) + "…)");
+}
+
 function registeredDomain(url) {
   try {
     const h = new URL(url).hostname;
@@ -701,6 +728,22 @@ async function scanUrl(url, source, meta = {}) {
       await dispatchResult(source, url, cached, { ...meta, cached: true });
       return cached;
     }
+    // 영구 denylist hit — LLM/추출/OCR 전부 생략하고 phishing 으로 short-circuit.
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      if (host && await isDenylisted(host)) {
+        const denied = {
+          phishing_score: 8, brand: null, phishing: true,
+          suspicious_domain: true,
+          reason: "이전 검사에서 피싱으로 판정된 호스트 (영구 기록) — LLM 재검사 생략",
+          url, ts: Date.now()
+        };
+        await cacheSet(key, denied);
+        await chrome.storage.session.set({ lastVerdict: denied });
+        await dispatchResult(source, url, denied, { ...meta, denylisted: true });
+        return denied;
+      }
+    } catch {}
   }
   let extracted, ocr = "", whois = "WHOIS lookup skipped";
   try {
@@ -761,6 +804,14 @@ async function scanUrl(url, source, meta = {}) {
   verdict.brand = normalizeBrand(verdict.brand);
   // ── 결정론적 후처리 오버라이드 ──
   await applyOverrides(verdict, extracted, url);
+  // 강한 phishing 으로 확정된 호스트는 영구 denylist 에 기록.
+  // O5/O6 가 우회한 케이스는 verdict.phishing 이 false 가 되므로 자연스럽게 제외.
+  if (verdict.phishing === true && (verdict.phishing_score ?? 0) >= 7) {
+    try {
+      const finalHost = new URL(extracted?.finalUrl || url).hostname.toLowerCase();
+      if (finalHost) await addToDenylist(finalHost);
+    } catch {}
+  }
   verdict.url = url;
   verdict.ts = Date.now();
   await cacheSet(key, verdict);
@@ -1065,17 +1116,33 @@ async function applyOverrides(verdict, extracted, url) {
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
   }
 
+  // [D1] 영구 denylist hit — 이전에 phishing(>=7)으로 확정된 호스트.
+  // O5/O6 가 우회하지 못하도록 danger 푸시. allowlist 는 scanUrl 상단에서 이미 처리됨.
+  if (finalHost && await isDenylisted(finalHost)) {
+    overrides.push({ rule: "D1", sev: "danger", reason: `영구 denylist 일치 — 이전 검사에서 피싱으로 판정된 호스트: ${finalHost}` });
+    verdict.phishing = true;
+    verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 8);
+    verdict.suspicious_domain = true;
+  }
+
   // [O5] 사용자 개인 신뢰 도메인 (즐겨찾기 / 빈번 방문 / Top Sites)
   if (!overrides.some(o => o.sev === "danger") && finalHost) {
     try {
       const trustedDomains = await getUserTrustedDomains();
+      // shared-hosting eTLD-like 도메인(workers.dev, pages.dev, github.io 등)이 슬라이스
+      // 폴백으로 통째 신뢰되지 않도록 가드. 사용자가 *.workers.dev 의 다른 합법 워커를
+      // 방문해서 workers.dev 가 trusted Set 에 올라와도 매칭 거부.
+      const sliceCandidate = finalHost.includes(".")
+        ? finalHost.split(".").slice(-2).join(".")
+        : null;
+      const sliceIsSharedHosting = sliceCandidate
+        ? FREE_HOSTING_RE.test(sliceCandidate)
+        : false;
       const o5Domain = trustedDomains.has(finalHost)
         ? finalHost
-        : (finalHost.includes(".")
-          ? trustedDomains.has(finalHost.split(".").slice(-2).join("."))
-            ? finalHost.split(".").slice(-2).join(".")
-            : null
-          : null);
+        : (sliceCandidate && !sliceIsSharedHosting && trustedDomains.has(sliceCandidate))
+          ? sliceCandidate
+          : null;
       if (o5Domain) {
         overrides.push({ rule: "O5", sev: "safe",
           reason: `사용자 신뢰 도메인 (즐겨찾기/방문기록/TopSites): ${o5Domain}`,
@@ -1089,12 +1156,18 @@ async function applyOverrides(verdict, extracted, url) {
 
   // [O6] 공개 랭킹 기반 국내 인기 도메인 — 위험 신호 없으면 FP 방지
   if (!overrides.some(o => o.sev === "danger")) {
-    const o6Domain = finalHost ? POPULAR_KR_DOMAINS.has(finalHost)
-      ? finalHost
-      : (finalHost.includes(".") ? POPULAR_KR_DOMAINS.has(finalHost.split(".").slice(-2).join("."))
-        ? finalHost.split(".").slice(-2).join(".")
-        : null : null)
+    // POPULAR_KR_DOMAINS 갱신 사고로 shared-hosting 이 들어와도 슬라이스 폴백이 안 먹게 방어.
+    const o6SliceCandidate = finalHost && finalHost.includes(".")
+      ? finalHost.split(".").slice(-2).join(".")
       : null;
+    const o6SliceIsSharedHosting = o6SliceCandidate
+      ? FREE_HOSTING_RE.test(o6SliceCandidate)
+      : false;
+    const o6Domain = finalHost && POPULAR_KR_DOMAINS.has(finalHost)
+      ? finalHost
+      : (o6SliceCandidate && !o6SliceIsSharedHosting && POPULAR_KR_DOMAINS.has(o6SliceCandidate))
+        ? o6SliceCandidate
+        : null;
     if (o6Domain) {
       overrides.push({ rule: "O6", sev: "safe",
         reason: `공개 랭킹 인기 도메인: ${o6Domain}`, suppressModelReason: true });
@@ -1131,8 +1204,11 @@ async function dispatchResult(source, url, verdict, meta) {
 
   // 위험 + 사용자가 활성 탭에 있는 경우(action/popup/navigation/download) → 탭 가로채기.
   // contextMenu는 사용자가 아직 방문 안 했으므로 알림만.
+  // 사용자의 적극적 액션(navigation/action/popup)은 fresh user intent 이므로 캐시 hit 이어도 intercept 발화.
+  // 그렇지 않으면 OWA pre-scan 의 캐시가 click-time warning.html 가로채기를 죽임.
   const interceptSources = new Set(["action", "popup", "navigation", "download-silent-ok"]);
-  if (sev === "danger" && !meta?.cached && !meta?.allowed && interceptSources.has(source) && meta?.tabId != null) {
+  const isUserIntent = source === "navigation" || source === "action" || source === "popup";
+  if (sev === "danger" && !meta?.allowed && (isUserIntent || !meta?.cached) && interceptSources.has(source) && meta?.tabId != null) {
     try {
       const vid = await sha256Hex(url);
       await chrome.storage.session.set({ ["verdict:" + vid]: verdict });
