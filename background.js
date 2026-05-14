@@ -74,10 +74,144 @@ const OFFICIAL_DOMAINS = {
   "SK Planet":    ["skplanet.com"],
   "OKCashbag":    ["okcashbag.com"],
   "11번가":       ["11st.co.kr"],
+  "Naver":        ["naver.com", "naver.net", "navercorp.com"],
+  "네이버":       ["naver.com", "naver.net", "navercorp.com"],
+  "Kakao":        ["kakao.com", "daum.net", "kakaobank.com", "kakaopay.com", "kakaocorp.com"],
+  "카카오":       ["kakao.com", "daum.net", "kakaobank.com", "kakaopay.com", "kakaocorp.com"],
+  "Daum":         ["daum.net", "kakao.com"],
+  "다음":         ["daum.net", "kakao.com"],
+  "Nate":         ["nate.com", "cyworld.com"],
+  "네이트":       ["nate.com", "cyworld.com"],
+  "Coupang":      ["coupang.com", "coupangplay.com"],
+  "쿠팡":         ["coupang.com", "coupangplay.com"],
+  "Gmarket":      ["gmarket.co.kr", "gmarket.com"],
+  "지마켓":       ["gmarket.co.kr", "gmarket.com"],
+  "Auction":      ["auction.co.kr"],
+  "옥션":         ["auction.co.kr"],
+  "Interpark":    ["interpark.com"],
+  "인터파크":     ["interpark.com"],
+  "Toss":         ["toss.im", "tossinvest.com", "tossbank.com"],
+  "토스":         ["toss.im", "tossinvest.com", "tossbank.com"],
+  "Samsung":      ["samsung.com", "samsung.co.kr", "samsungfire.com", "samsunglife.com"],
+  "삼성":         ["samsung.com", "samsung.co.kr"],
+  "LG":           ["lg.com", "lge.com", "lgcns.com", "lguplus.com"],
+  "LG U+":        ["lguplus.com", "lg.com"],
+  "KT":           ["kt.com", "olleh.com", "kticloud.com"],
+  "Hyundai":      ["hyundai.com", "hyundai.co.kr", "hmg.com"],
+  "현대":         ["hyundai.com", "hyundai.co.kr"],
+  "Kia":          ["kia.com", "kia.co.kr"],
+  "기아":         ["kia.com", "kia.co.kr"],
+  "Shinsegae":    ["shinsegae.com", "ssg.com", "emart.com"],
+  "신세계":       ["shinsegae.com", "ssg.com", "emart.com"],
+  "Lotte":        ["lotte.com", "lotteon.com", "lottemart.com", "lottecinema.co.kr"],
+  "롯데":         ["lotte.com", "lotteon.com", "lottemart.com"],
+  "KB국민은행":   ["kbstar.com", "kbfg.com", "liivmate.com"],
+  "신한은행":     ["shinhan.com", "shinhancard.com"],
+  "하나은행":     ["hanabank.com", "kebhana.com"],
+  "우리은행":     ["wooribank.com", "wooricard.com"],
+  "NH농협":       ["nonghyup.com", "nhbank.com", "nhcard.com"],
+  "IBK기업은행":  ["ibk.co.kr"],
+  "카카오뱅크":   ["kakaobank.com"],
+  "케이뱅크":     ["kbanknow.com"],
+  "Melon":        ["melon.com"],
+  "멜론":         ["melon.com"],
+  "Naver Webtoon":["webtoon.com", "comic.naver.com"],
+  "네이버웹툰":   ["webtoon.com"],
+  "Krafton":      ["battlegrounds.com", "pubg.com", "krafton.com"],
+  "Netmarble":    ["netmarble.com", "netmarble.net"],
+  "넷마블":       ["netmarble.com", "netmarble.net"],
+  "Nexon":        ["nexon.com", "nexon.net"],
+  "넥슨":         ["nexon.com", "nexon.net"],
+  "NCSoft":       ["ncsoft.com", "lineage.com"],
+  "엔씨소프트":   ["ncsoft.com"],
+  "Musinsa":      ["musinsa.com"],
+  "무신사":       ["musinsa.com"],
+  "Baemin":       ["baemin.com", "woowa.net"],
+  "배달의민족":   ["baemin.com", "woowa.net"],
+  "Yogiyo":       ["yogiyo.co.kr"],
+  "요기요":       ["yogiyo.co.kr"],
+  "Kakao Mobility": ["kakaomobility.com", "t.kakao.com"],
+  "카카오T":      ["kakaomobility.com"],
+  "Naver Map":    ["map.naver.com"],
+  "CGV":          ["cgv.co.kr"],
+  "Megabox":      ["megabox.co.kr"],
+  "Lotte Cinema": ["lottecinema.co.kr"],
+  "Watcha":       ["watcha.com"],
+  "Wavve":        ["wavve.com"],
+  "Seezn":        ["seezn.com"],
+  "Kyobo":        ["kyobobook.co.kr"],
+  "교보문고":     ["kyobobook.co.kr"],
+  "Yes24":        ["yes24.com"],
+  "Aladin":       ["aladin.co.kr"],
+  "알라딘":       ["aladin.co.kr"],
 };
 // 무료 호스팅 / 단명 서브도메인 / 누구나 임의 콘텐츠 올리는 클라우드 스토리지·CDN.
 // 정식 브랜드 사이트는 이런 곳에 안 박힘 — 브랜드 사칭 발견 + 이 호스팅이면 거의 확실히 피싱.
 const FREE_HOSTING_RE = /(?:^|\.)(?:workers\.dev|pages\.dev|vercel\.app|netlify\.app|netlify\.com|replit\.dev|repl\.co|github\.io|gitlab\.io|weebly\.com|webflow\.io|web\.app|firebaseapp\.com|surge\.sh|onrender\.com|glitch\.me|wixsite\.com|squarespace\.com|wordpress\.com|blogspot\.com|tiiny\.site|herokuapp\.com|cyclic\.app|fly\.dev|deno\.dev|render\.com|ngrok\.io|ngrok-free\.app|trycloudflare\.com|amplifyapp\.com|amazonaws\.com|cloudfront\.net|azurewebsites\.net|azureedge\.net|azurestaticapps\.net|blob\.core\.windows\.net|web\.core\.windows\.net|storage\.googleapis\.com|appspot\.com|run\.app|digitaloceanspaces\.com|ondigitalocean\.app|backblazeb2\.com|fastly\.net|b-cdn\.net|github\.dev|githubusercontent\.com|gitlab\.io|s3-website[-.][a-z0-9-]+\.amazonaws\.com)$/i;
+
+// 공개 랭킹(Cloudflare Radar KR / Tranco) 기반 한국 인기 도메인 목록.
+// OFFICIAL_DOMAINS와 달리 LLM의 브랜드 인식 없이도 도메인 직접 매칭으로 동작.
+// 업데이트: Cloudflare Radar https://radar.cloudflare.com/domains 에서 KR 필터 후 갱신.
+const POPULAR_KR_DOMAINS = new Set([
+  // 포털·검색
+  "naver.com", "daum.net", "nate.com", "kakao.com", "zum.com",
+  // 소셜·커뮤니티
+  "dcinside.com", "clien.net", "ruliweb.com", "fmkorea.com", "instiz.net",
+  "theqoo.net", "mlbpark.com", "bobae.co.kr", "slrclub.com", "ppomppu.co.kr",
+  "todayhumor.co.kr", "82cook.com", "blind.com",
+  // 뉴스·미디어
+  "chosun.com", "joongang.co.kr", "donga.com", "hani.co.kr", "ohmynews.com",
+  "yna.co.kr", "ytn.co.kr", "mbc.co.kr", "kbs.co.kr", "sbs.co.kr",
+  "jtbc.co.kr", "tvchosun.com", "mbn.co.kr", "hankyung.com",
+  "mk.co.kr", "sedaily.com", "etnews.com", "zdnet.co.kr",
+  // 쇼핑·커머스
+  "coupang.com", "gmarket.co.kr", "11st.co.kr", "auction.co.kr",
+  "ssg.com", "lotteon.com", "tmon.co.kr", "wemakeprice.com",
+  "interpark.com", "musinsa.com", "zigzag.kr", "ably.team",
+  "oliveyoung.co.kr", "hwahae.kr", "kurly.com", "ohou.se",
+  // 금융·은행
+  "kbstar.com", "shinhan.com", "wooribank.com", "hanabank.com",
+  "nonghyup.com", "ibk.co.kr", "kakaobank.com", "kbanknow.com",
+  "toss.im", "shinhancard.com", "hyundaicard.com", "lottefinance.co.kr",
+  "samsungcard.com", "bccard.com", "nhcard.com", "lottecard.co.kr",
+  "kbcard.com", "wooricard.com", "citibank.co.kr", "sc.com",
+  "koreainvestment.com", "nhqv.com", "miraeasset.com", "kiwoom.com",
+  "samsung.com", "hanwha.com",
+  // 이동통신·IT
+  "sktelecom.com", "kt.com", "lguplus.com", "skbroadband.com",
+  "skplanet.com", "skstoa.com", "naver.net", "navercorp.com",
+  "kakaoenterprise.com", "kakaopage.com", "webtoon.com",
+  // 게임
+  "nexon.com", "netmarble.com", "ncsoft.com", "krafton.com",
+  "smilegate.com", "bluehole.com", "ngelgames.com", "4game.com",
+  // 음악·동영상·OTT
+  "melon.com", "genie.co.kr", "bugs.co.kr", "vibe.naver.com",
+  "wavve.com", "watcha.com", "tving.com", "seezn.com",
+  "laftel.net", "vlive.tv",
+  // 배달·교통·여행
+  "baemin.com", "yogiyo.co.kr", "coupangeats.com",
+  "kakaomobility.com", "kakao.com",
+  "naver.com", "yanolja.com", "yeogi.com", "expedia.co.kr",
+  "korail.com", "kobus.co.kr", "airport.kr",
+  // 교육
+  "edunet.net", "ebs.co.kr", "khan.co.kr", "megastudy.net",
+  "etoos.com", "daesung.com", "srtplus.or.kr",
+  // 공공·정부
+  "gov.kr", "korea.kr", "moe.go.kr", "mois.go.kr", "nts.go.kr",
+  "nhis.or.kr", "nps.or.kr", "hometax.go.kr", "minwon.go.kr",
+  "police.go.kr", "1365.go.kr", "bokjiro.go.kr",
+  // 부동산
+  "naver.com", "zigbang.com", "dabangapp.com", "hogangnono.com",
+  // 도서·문화
+  "kyobobook.co.kr", "yes24.com", "aladin.co.kr",
+  "cgv.co.kr", "megabox.co.kr", "lottecinema.co.kr",
+  // 글로벌(한국 사용 상위)
+  "google.com", "youtube.com", "facebook.com", "instagram.com",
+  "twitter.com", "x.com", "tiktok.com", "linkedin.com",
+  "github.com", "stackoverflow.com", "wikipedia.org",
+  "amazon.com", "ebay.com", "aliexpress.com",
+  "microsoft.com", "apple.com", "adobe.com",
+]);
 
 const OFFSCREEN_URL = chrome.runtime.getURL("offscreen.html");
 const WARNING_URL = chrome.runtime.getURL("warning.html");
@@ -626,7 +760,7 @@ async function scanUrl(url, source, meta = {}) {
   }
   verdict.brand = normalizeBrand(verdict.brand);
   // ── 결정론적 후처리 오버라이드 ──
-  applyOverrides(verdict, extracted, url);
+  await applyOverrides(verdict, extracted, url);
   verdict.url = url;
   verdict.ts = Date.now();
   await cacheSet(key, verdict);
@@ -756,7 +890,48 @@ function hasObfuscatedCurlPipeToShell(extracted) {
   return /\bcurl\b[\s\S]{0,20000}\$\(\s*echo\b[\s\S]{0,20000}\|\s*tr\s+['"][^'"]+['"]\s+['"][^'"]+['"][\s\S]{0,20000}\)\s*\|\s*(?:bash|sh|zsh)\b/i.test(t);
 }
 
-function applyOverrides(verdict, extracted, url) {
+// 사용자 신뢰 도메인 캐시 — SW 수명 동안 유지 (lazy 초기화)
+let _userTrustedDomains = null;
+
+async function getUserTrustedDomains() {
+  if (_userTrustedDomains) return _userTrustedDomains;
+  const trusted = new Set();
+
+  // 1. 즐겨찾기 — 사용자가 명시적으로 저장한 사이트 (가장 강한 신뢰)
+  try {
+    const bookmarks = await chrome.bookmarks.search({});
+    for (const b of bookmarks) {
+      const d = registeredDomain(b.url || "");
+      if (d) trusted.add(d);
+    }
+  } catch {}
+
+  // 2. 방문 기록 — 90일 내 10회 이상 방문한 도메인
+  try {
+    const cutoff = Date.now() - 90 * 24 * 3600 * 1000;
+    const items = await chrome.history.search({ text: "", maxResults: 500, startTime: cutoff });
+    for (const item of items) {
+      if ((item.visitCount || 0) >= 10) {
+        const d = registeredDomain(item.url || "");
+        if (d) trusted.add(d);
+      }
+    }
+  } catch {}
+
+  // 3. Top Sites — Chrome 뉴탭 기준 상위 20개
+  try {
+    const top = await chrome.topSites.get();
+    for (const s of top) {
+      const d = registeredDomain(s.url || "");
+      if (d) trusted.add(d);
+    }
+  } catch {}
+
+  _userTrustedDomains = trusted;
+  return trusted;
+}
+
+async function applyOverrides(verdict, extracted, url) {
   const overrides = [];
   let finalHost = "", origHost = "";
   try { finalHost = new URL(extracted?.finalUrl || url).hostname.toLowerCase(); } catch {}
@@ -888,6 +1063,45 @@ function applyOverrides(verdict, extracted, url) {
     overrides.push({ rule: "O4", sev: "danger", reason: `위험 URI 스킴 링크: ${dangerUris.slice(0,3).join(", ")}` });
     verdict.phishing = true;
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
+  }
+
+  // [O5] 사용자 개인 신뢰 도메인 (즐겨찾기 / 빈번 방문 / Top Sites)
+  if (!overrides.some(o => o.sev === "danger") && finalHost) {
+    try {
+      const trustedDomains = await getUserTrustedDomains();
+      const o5Domain = trustedDomains.has(finalHost)
+        ? finalHost
+        : (finalHost.includes(".")
+          ? trustedDomains.has(finalHost.split(".").slice(-2).join("."))
+            ? finalHost.split(".").slice(-2).join(".")
+            : null
+          : null);
+      if (o5Domain) {
+        overrides.push({ rule: "O5", sev: "safe",
+          reason: `사용자 신뢰 도메인 (즐겨찾기/방문기록/TopSites): ${o5Domain}`,
+          suppressModelReason: true });
+        verdict.phishing = false;
+        verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+        verdict.suspicious_domain = false;
+      }
+    } catch {}
+  }
+
+  // [O6] 공개 랭킹 기반 국내 인기 도메인 — 위험 신호 없으면 FP 방지
+  if (!overrides.some(o => o.sev === "danger")) {
+    const o6Domain = finalHost ? POPULAR_KR_DOMAINS.has(finalHost)
+      ? finalHost
+      : (finalHost.includes(".") ? POPULAR_KR_DOMAINS.has(finalHost.split(".").slice(-2).join("."))
+        ? finalHost.split(".").slice(-2).join(".")
+        : null : null)
+      : null;
+    if (o6Domain) {
+      overrides.push({ rule: "O6", sev: "safe",
+        reason: `공개 랭킹 인기 도메인: ${o6Domain}`, suppressModelReason: true });
+      verdict.phishing = false;
+      verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+      verdict.suspicious_domain = false;
+    }
   }
 
   if (overrides.length > 0) {
