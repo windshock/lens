@@ -186,10 +186,15 @@
       // scan severity: capture 단계에서 일단 막고, 빠른 스캔 후 결정
       ev.preventDefault();
       ev.stopImmediatePropagation();
-      // 캐시 hit이면 banner 없이 즉시 처리 (사용자에게 굳이 "검사 중" 안 보여줌)
-      const cached = (lastVerdict && lastVerdictUrl === location.href);
-      if (!cached) showInlineWarning(`이 페이지를 검사 중입니다… (${cls.reason})`);
+      // banner는 스캔이 800ms 안에 끝나면 아예 안 보여준다.
+      // SW의 safeDomains hit/URL 캐시 hit은 IPC만 타고 ~50-200ms에 리턴하므로 banner가 깜빡거리지 않는다.
+      // 실제 추출+LLM이 도는 콜드 패스에서만 banner가 떠서 사용자에게 진행 상황을 알린다.
+      let bannerTimer = setTimeout(() => {
+        showInlineWarning(`이 페이지를 검사 중입니다… (${cls.reason})`);
+        bannerTimer = null;
+      }, 800);
       const v = await quickScanCurrentPage();
+      if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
       if (v && (v.phishing || (v.phishing_score ?? 0) >= 7)) {
         showInlineWarning(`피싱 의심 페이지 — 클릭 차단됨. 사유: ${(v.reason || "").slice(0, 160)}`);
         return;
