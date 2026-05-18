@@ -96,7 +96,33 @@
       "notif.prefixOk":         "[Safe]",
       "notif.tailCached":       " (cached)",
       "notif.tailSkipped":      " (internal domain)",
-      "notif.tailAllowed":      " (user allowed)"
+      "notif.tailAllowed":      " (user allowed)",
+      "notif.downloadCancelTitle": "Download cancelled",
+      "notif.downloadCancelBody": "Blocked a file started from a suspected phishing page ({0}).",
+
+      // service-worker verdict / override reasons
+      "bg.scan.allowlistShortCircuit": "User has allowed this host ({0}).",
+      "bg.scan.sessionTrusted":       "Session-trusted domain — already judged safe in this session ({0}).",
+      "bg.scan.denylistShortCircuit": "Previously confirmed phishing host (persistent record) — re-scan with LLM skipped.",
+      "bg.scan.internalSkip":         "Trusted internal domain — no risky behaviour, model call skipped.",
+
+      "bg.override.prefix":           "[Auto override: {0}] {1}. ",
+
+      "bg.override.O0.baitRedirect":  "Evasive redirect: origin ({0}) is on free hosting but the page redirected to a legitimate domain ({1}) — likely sandbox evasion.",
+      "bg.override.O1whois.match":    "WHOIS / RDAP / CT match the brand '{0}' — domain appears to be legitimately owned.",
+      "bg.override.O1.freeHostStrong":"Brand impersonation on free hosting: '{0}' official domain is {1} but the page is on {2}.",
+      "bg.override.O1.docPagesMention":"Doc-style GitHub Pages: mentions '{0}' but no clipboard payload / dangerous URI / auto-download / login form.",
+      "bg.override.O1.freeHostWarn": "Brand mention + free hosting: '{0}' official domain is {1} but the page is on {2} (do not flag as phishing on this signal alone).",
+      "bg.override.O1.brandMismatchWithEvidence": "Brand impersonation + credential / danger signal: '{0}' official domain is {1} but the page is on {2}.",
+      "bg.override.O1.brandMismatchOnly": "Brand-domain mismatch: '{0}' is not on its official domain ({1}); page is on {2}.",
+      "bg.override.O1.brandSafe":     "Official brand domain: '{0}' is hosted on its official domain ({1}).",
+      "bg.override.O2.clipboardShell":"Shell payload written to clipboard: {0}",
+      "bg.override.O3.autoDownload":  "Auto-download attempt ({0} file(s)): {1}",
+      "bg.override.O4.dangerousUri":  "Dangerous URI scheme links: {0}",
+      "bg.override.O7.kitMarker":     "Phishing-kit signature ({0}) + credential form.",
+      "bg.override.D1.denylistHit":   "Persistent denylist match — previously confirmed phishing host: {0}.",
+      "bg.override.O5.personalTrust": "User-trusted domain (bookmarks / history / top sites): {0}",
+      "bg.override.O6.popularKr":     "Popular ranked domain: {0}"
     },
     ko: {
       // popup
@@ -189,7 +215,33 @@
       "notif.prefixOk":         "[안전]",
       "notif.tailCached":       " (캐시)",
       "notif.tailSkipped":      " (사내 도메인)",
-      "notif.tailAllowed":      " (사용자 허용)"
+      "notif.tailAllowed":      " (사용자 허용)",
+      "notif.downloadCancelTitle": "다운로드 취소",
+      "notif.downloadCancelBody": "피싱 의심 페이지({0})에서 시작된 파일을 차단했습니다.",
+
+      // service-worker verdict / override reasons
+      "bg.scan.allowlistShortCircuit": "사용자가 이 호스트({0})를 허용함",
+      "bg.scan.sessionTrusted":       "세션 신뢰 도메인 — 이 세션의 이전 검사에서 안전 판정 ({0})",
+      "bg.scan.denylistShortCircuit": "이전 검사에서 피싱으로 판정된 호스트 (영구 기록) — LLM 재검사 생략",
+      "bg.scan.internalSkip":         "사내 신뢰 도메인 — 위험 행위 없음, 모델 호출 생략",
+
+      "bg.override.prefix":           "[자동 오버라이드: {0}] {1}. ",
+
+      "bg.override.O0.baitRedirect":  "회피형 redirect: 원본({0})이 무료 호스팅인데 정식 도메인({1})로 우회 redirect — 분석 회피 의심",
+      "bg.override.O1whois.match":    "WHOIS/RDAP/CT 가 브랜드 '{0}' 와 일치 — 정식 도메인 추정",
+      "bg.override.O1.freeHostStrong":"브랜드 사칭 + 무료 호스팅: '{0}' 정식 도메인은 {1} 인데 페이지는 {2}",
+      "bg.override.O1.docPagesMention":"문서형 GitHub Pages: '{0}' 브랜드를 언급하지만 클립보드 페이로드/위험 URI/자동 다운로드/로그인 폼 없음",
+      "bg.override.O1.freeHostWarn": "브랜드 언급 + 무료 호스팅: '{0}' 정식 도메인은 {1} 이지만 페이지는 {2} (단독 증거로 피싱 확정 금지)",
+      "bg.override.O1.brandMismatchWithEvidence": "브랜드 사칭 + credential/위험 신호: '{0}' 정식 도메인은 {1} 인데 페이지는 {2}",
+      "bg.override.O1.brandMismatchOnly": "브랜드 도메인 불일치: '{0}' 정식 도메인({1})이 아닌 {2}",
+      "bg.override.O1.brandSafe":     "정식 브랜드 도메인: '{0}' 공식 도메인({1})에서 호스팅됨",
+      "bg.override.O2.clipboardShell":"클립보드에 쉘 페이로드 복사: {0}",
+      "bg.override.O3.autoDownload":  "자동 다운로드 시도({0}개): {1}",
+      "bg.override.O4.dangerousUri":  "위험 URI 스킴 링크: {0}",
+      "bg.override.O7.kitMarker":     "Phishing kit 시그너처 ({0}) + credential 폼",
+      "bg.override.D1.denylistHit":   "영구 denylist 일치 — 이전 검사에서 피싱으로 판정된 호스트: {0}",
+      "bg.override.O5.personalTrust": "사용자 신뢰 도메인 (즐겨찾기/방문기록/TopSites): {0}",
+      "bg.override.O6.popularKr":     "공개 랭킹 인기 도메인: {0}"
     }
   };
 

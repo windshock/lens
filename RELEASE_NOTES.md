@@ -1,3 +1,26 @@
+# ScamGuard AI v0.1.28 Release Notes
+
+## 🌐 Full i18n — override / scan-shortcut reasons now translated too
+
+v0.1.27 split the localisation work into "UI chrome now" and "override reasons later." That left every Korean-mode user reading a Korean prefix mixed with an English LLM sentence, and every English-mode user reading a Korean prefix in their otherwise English UI. This release closes that gap — every reason string emitted by the service worker now flows through `t()`.
+
+### Added i18n keys
+- **Override prefix**: `bg.override.prefix` — `"[Auto override: {0}] {1}. "` / `"[자동 오버라이드: {0}] {1}. "`
+- **Override rules**: separate keys per rule, with placeholders for brand / official domain / offending host / kit markers etc. — `bg.override.O0.baitRedirect`, `O1whois.match`, `O1.freeHostStrong`, `O1.docPagesMention`, `O1.freeHostWarn`, `O1.brandMismatchWithEvidence`, `O1.brandMismatchOnly`, `O1.brandSafe`, `O2.clipboardShell`, `O3.autoDownload`, `O4.dangerousUri`, `O7.kitMarker`, `D1.denylistHit`, `O5.personalTrust`, `O6.popularKr`.
+- **Scan-time short-circuit reasons**: `bg.scan.allowlistShortCircuit`, `bg.scan.sessionTrusted`, `bg.scan.denylistShortCircuit`, `bg.scan.internalSkip`.
+- **Download cancellation notification**: `notif.downloadCancelTitle`, `notif.downloadCancelBody`.
+
+### Behaviour
+- The same `chrome.storage.local.lang` toggle decides which strings are rendered. Switching language in the popup live-updates the SW's `_lang` via `chrome.storage.onChanged`, so a Korean → English switch immediately turns the next override prefix into `[Auto override: …]`.
+- The translated reason ends up in `verdict.reason`, which is then displayed in the warning page, verdict detail page, and notification — all three surfaces now match the user's chosen language end-to-end (LLM sentence still English; everything we control is localised).
+
+### Still not translated
+- The LLM-generated sentence inside `verdict.reason` — Gemini Nano outputs English by design.
+- `CLAUDE.md` (developer documentation, intentionally Korean).
+- The SYS prompt sent to the model (English-only by design).
+
+---
+
 # ScamGuard AI v0.1.27 Release Notes
 
 ## 🌐 Bilingual UI — English by default, Korean as a runtime toggle

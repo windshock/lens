@@ -863,7 +863,7 @@ async function scanUrl(url, source, meta = {}) {
       const allowed = {
         phishing_score: 0, brand: null, phishing: false,
         suspicious_domain: false,
-        reason: `사용자가 이 호스트(${allowlistHost})를 허용함`,
+        reason: t("bg.scan.allowlistShortCircuit", allowlistHost),
         url, ts: Date.now()
       };
       await dispatchResult(source, url, allowed, { ...meta, allowed: true });
@@ -884,7 +884,7 @@ async function scanUrl(url, source, meta = {}) {
           const safeBySession = {
             phishing_score: 0, brand: null, phishing: false,
             suspicious_domain: false,
-            reason: `세션 신뢰 도메인 — 이 세션의 이전 검사에서 안전 판정 (${reg})`,
+            reason: t("bg.scan.sessionTrusted", reg),
             url, ts: Date.now()
           };
           await cacheSet(key, safeBySession);
@@ -901,7 +901,7 @@ async function scanUrl(url, source, meta = {}) {
         const denied = {
           phishing_score: 8, brand: null, phishing: true,
           suspicious_domain: true,
-          reason: "이전 검사에서 피싱으로 판정된 호스트 (영구 기록) — LLM 재검사 생략",
+          reason: t("bg.scan.denylistShortCircuit"),
           url, ts: Date.now()
         };
         await cacheSet(key, denied);
@@ -918,7 +918,7 @@ async function scanUrl(url, source, meta = {}) {
     if (internalDomain && !hasInternalBypassRisk(extracted)) {
       const safe = {
         phishing_score: 0, brand: null, phishing: false,
-        suspicious_domain: false, reason: "사내 신뢰 도메인 — 위험 행위 없음, 모델 호출 생략",
+        suspicious_domain: false, reason: t("bg.scan.internalSkip"),
         url, ts: Date.now()
       };
       if (!bypassLookup) await cacheSet(key, safe);
@@ -1174,7 +1174,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
     overrides.push({
       rule: "O0",
       sev: "danger",
-      reason: `회피형 redirect: 원본(${origHost})이 무료 호스팅인데 정식 도메인(${finalHost})로 우회 redirect — 분석 회피 의심`
+      reason: t("bg.override.O0.baitRedirect", origHost, finalHost)
     });
     verdict.phishing = true;
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 8);
@@ -1195,7 +1195,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
       overrides.push({
         rule: "O1-whois",
         sev: "safe",
-        reason: `WHOIS/RDAP/CT 가 브랜드 '${verdict.brand}' 와 일치 — 정식 도메인 추정`,
+        reason: t("bg.override.O1whois.match", verdict.brand),
         suppressModelReason: true
       });
       verdict.phishing = false;
@@ -1239,7 +1239,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
             overrides.push({
               rule: "O1",
               sev: "danger",
-              reason: `브랜드 사칭 + 무료 호스팅: '${verdict.brand}' 정식 도메인은 ${officialList[0]} 인데 페이지는 ${offendingFreeHost}`
+              reason: t("bg.override.O1.freeHostStrong", verdict.brand, officialList[0], offendingFreeHost)
             });
             verdict.phishing = true;
             verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
@@ -1251,8 +1251,8 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
               rule: "O1",
               sev: "warn",
               reason: isDocLikeFreeHosting(offendingFreeHost)
-                ? `문서형 GitHub Pages: '${verdict.brand}' 브랜드를 언급하지만 클립보드 페이로드/위험 URI/자동 다운로드/로그인 폼 없음`
-                : `브랜드 언급 + 무료 호스팅: '${verdict.brand}' 정식 도메인은 ${officialList[0]} 이지만 페이지는 ${offendingFreeHost} (단독 증거로 피싱 확정 금지)`,
+                ? t("bg.override.O1.docPagesMention", verdict.brand)
+                : t("bg.override.O1.freeHostWarn", verdict.brand, officialList[0], offendingFreeHost),
               suppressModelReason: isDocLikeFreeHosting(offendingFreeHost)
             });
             // github.io는 "문서/블로그" FP가 매우 많아 예외로 낮게 캡핑.
@@ -1276,7 +1276,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
             overrides.push({
               rule: "O1",
               sev: "danger",
-              reason: `브랜드 사칭 + credential/위험 신호: '${verdict.brand}' 정식 도메인은 ${officialList[0]} 인데 페이지는 ${offenders[0]}`
+              reason: t("bg.override.O1.brandMismatchWithEvidence", verdict.brand, officialList[0], offenders[0])
             });
             verdict.phishing = true;
             verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
@@ -1285,7 +1285,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
             overrides.push({
               rule: "O1",
               sev: "warn",
-              reason: `브랜드 도메인 불일치: '${verdict.brand}' 정식 도메인(${officialList[0]})이 아닌 ${offenders[0]}`
+              reason: t("bg.override.O1.brandMismatchOnly", verdict.brand, officialList[0], offenders[0])
             });
             verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 6);
             verdict.suspicious_domain = true;
@@ -1297,7 +1297,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
         overrides.push({
           rule: "O1-safe",
           sev: "safe",
-          reason: `정식 브랜드 도메인: '${verdict.brand}' 공식 도메인(${officialList[0]})에서 호스팅됨`,
+          reason: t("bg.override.O1.brandSafe", verdict.brand, officialList[0]),
           suppressModelReason: true
         });
         verdict.phishing = false;
@@ -1312,7 +1312,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
   for (const c of clips) {
     const text = (typeof c === "string") ? c : (c?.text || "");
     if (SHELL_PAYLOAD_RE.test(text)) {
-      overrides.push({ rule: "O2", sev: "danger", reason: `클립보드에 쉘 페이로드 복사: ${text.slice(0, 120)}` });
+      overrides.push({ rule: "O2", sev: "danger", reason: t("bg.override.O2.clipboardShell", text.slice(0, 120)) });
       verdict.phishing = true;
       verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 10);
       break;
@@ -1323,7 +1323,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
   const autoDl = extracted?.behaviors?.autoDownloads || [];
   if (autoDl.length > 0) {
     const f = autoDl[0]?.filename || autoDl[0]?.url || "(unknown)";
-    overrides.push({ rule: "O3", sev: "danger", reason: `자동 다운로드 시도(${autoDl.length}개): ${f}` });
+    overrides.push({ rule: "O3", sev: "danger", reason: t("bg.override.O3.autoDownload", autoDl.length, f) });
     verdict.phishing = true;
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
   }
@@ -1331,7 +1331,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
   // [O4] 위험 URI 스킴 링크 존재
   const dangerUris = extracted?.behaviors?.dangerousUris || [];
   if (dangerUris.length > 0) {
-    overrides.push({ rule: "O4", sev: "danger", reason: `위험 URI 스킴 링크: ${dangerUris.slice(0,3).join(", ")}` });
+    overrides.push({ rule: "O4", sev: "danger", reason: t("bg.override.O4.dangerousUri", dangerUris.slice(0,3).join(", ")) });
     verdict.phishing = true;
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
   }
@@ -1345,7 +1345,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
     overrides.push({
       rule: "O7",
       sev: "danger",
-      reason: `Phishing kit 시그너처 (${kitMarkers.slice(0,3).join(", ")}) + credential 폼`
+      reason: t("bg.override.O7.kitMarker", kitMarkers.slice(0,3).join(", "))
     });
     verdict.phishing = true;
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
@@ -1355,7 +1355,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
   // [D1] 영구 denylist hit — 이전에 phishing(>=7)으로 확정된 호스트.
   // O5/O6 가 우회하지 못하도록 danger 푸시. allowlist 는 scanUrl 상단에서 이미 처리됨.
   if (finalHost && await isDenylisted(finalHost)) {
-    overrides.push({ rule: "D1", sev: "danger", reason: `영구 denylist 일치 — 이전 검사에서 피싱으로 판정된 호스트: ${finalHost}` });
+    overrides.push({ rule: "D1", sev: "danger", reason: t("bg.override.D1.denylistHit", finalHost) });
     verdict.phishing = true;
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 8);
     verdict.suspicious_domain = true;
@@ -1381,7 +1381,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
           : null;
       if (o5Domain) {
         overrides.push({ rule: "O5", sev: "safe",
-          reason: `사용자 신뢰 도메인 (즐겨찾기/방문기록/TopSites): ${o5Domain}`,
+          reason: t("bg.override.O5.personalTrust", o5Domain),
           suppressModelReason: true });
         verdict.phishing = false;
         verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
@@ -1406,7 +1406,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
         : null;
     if (o6Domain) {
       overrides.push({ rule: "O6", sev: "safe",
-        reason: `공개 랭킹 인기 도메인: ${o6Domain}`, suppressModelReason: true });
+        reason: t("bg.override.O6.popularKr", o6Domain), suppressModelReason: true });
       verdict.phishing = false;
       verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
       verdict.suspicious_domain = false;
@@ -1414,8 +1414,9 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
   }
 
   if (overrides.length > 0) {
-    const prefix = "[자동 오버라이드: " + overrides.map(o => o.rule).join("+") + "] "
-      + overrides.map(o => o.reason).join(" · ") + ". ";
+    const prefix = t("bg.override.prefix",
+      overrides.map(o => o.rule).join("+"),
+      overrides.map(o => o.reason).join(" · "));
     const suppressModelReason = overrides.some(o => o.suppressModelReason) && !overrides.some(o => o.sev === "danger");
     verdict.reason = suppressModelReason ? prefix : prefix + (verdict.reason || "");
     console.log("applyOverrides:", overrides);
@@ -1791,7 +1792,7 @@ chrome.downloads.onCreated.addListener(async (item) => {
   if (danger) {
     try { await chrome.downloads.cancel(item.id); } catch {}
     try { await chrome.downloads.erase({ id: item.id }); } catch {}
-    await notify("danger", "다운로드 취소", `피싱 의심 페이지(${hostPage})에서 시작된 파일을 차단했습니다.`);
+    await notify("danger", t("notif.downloadCancelTitle"), t("notif.downloadCancelBody", hostPage));
   } else {
     try { await chrome.downloads.resume(item.id); } catch {}
   }
