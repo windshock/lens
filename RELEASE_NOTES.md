@@ -1,3 +1,35 @@
+# ScamGuard AI v0.1.21 Release Notes
+
+## 🎯 O7 — Deterministic phishing-kit fingerprints
+
+v0.1.20's O1 escalation only fires when Gemini Nano successfully identifies the impersonated brand. The `rsig.org` Microsoft sign-in spoof exposed the gap: even with `name="office_passwd"`, `name="ms_link"`, a pre-filled `<input type="hidden" name="email" value="jeff.kim@sk.com">`, and Microsoft's actual `aadcdn.msauth.net` stylesheet, the model returned `brand: null, phishing: false, phishing_score: 6` — under the danger threshold and not eligible for O1 elevation. The page never triggered the red warning.
+
+Looking at the kit's inline JavaScript gave us three Tier-1 fingerprints — patterns essentially never used by legitimate sites:
+
+```js
+// 1) victim-domain logo fetch — only phishing kits brand themselves dynamically per target
+`https://logo.clearbit.com/${domain}`
+
+// 2) victim company homepage screenshot as blurred background
+`https://api.screenshotmachine.com?key=...&url=https://${domain}&...`
+
+// 3) base64-obfuscated credential exfil endpoint
+const actionUrl = atob('Li4vb2Z4LnBocA=='); // → "../ofx.php"
+```
+
+### What changed
+- `content_extract.js` scans every inline `<script>` (the same loop that already pulls `clipboard.writeText` literals) and records up to 8 phishing-kit markers into `behaviors.phishingKitMarkers`:
+  - `clearbit-logo` — substring match on `logo.clearbit.com/`
+  - `screenshotmachine` — substring match on `api.screenshotmachine.com`
+  - `atob-url:<decoded>` — every `atob('<base64>')` literal is decoded; markers fire when the result starts with `../`, `./`, `http(s)://`, or ends in `.php` / `.aspx` / `.asp` / `.jsp` / `.do` / `.action` / `.cgi`
+- `background.js` adds rule **O7**: when `phishingKitMarkers` is non-empty **and** the same page has a password/email-input form (`hasCredentialLikeForms`), elevate to `danger` (score ≥ 9, `phishing = true`). Runs between O4 and D1, so D1 / O5 / O6 still apply on top.
+- The SYS prompt's "Critical signals" section now mentions `phishingKitMarkers` so Gemini Nano raises its score even when the deterministic O7 doesn't reach it.
+
+### Why this is safe against false positives
+Each marker individually has plausible legitimate uses (CRM dashboards embed Clearbit logos; monitoring tools call screenshotmachine; frameworks use `atob` for source maps and tokens). The override only fires when at least one marker co-exists with `hasCredentialLikeForms` — i.e. the page is asking for a password. That combination is the discriminator: legitimate password pages don't dynamically pull the logo of whatever email domain the user just typed.
+
+---
+
 # ScamGuard AI v0.1.20 Release Notes
 
 ## 🔒 Elevate brand-mismatch + credential-form to danger

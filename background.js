@@ -23,6 +23,7 @@ Critical signals (treat as strong evidence of phishing):
 - BEHAVIORS.dangerousUris non-empty — links with applescript://, ms-msdt://, shell:, vbscript: schemes are direct code-execution vectors.
 - BEHAVIORS.shellHits combined with BEHAVIORS.socialHits can be a ClickFix pattern ONLY when the page is instructing users to paste/run commands (e.g., "Win+R", "Run", "paste into Terminal/PowerShell") and/or when clipboardWrites contains a shell payload. Mere presence of shell commands in developer documentation is NOT phishing by itself.
 - Brand impersonation on hosting subdomains: if the page mimics brand X but is on workers.dev/pages.dev/vercel.app/netlify.app/etc. — assume phishing unless explicit demo disclaimer.
+- BEHAVIORS.phishingKitMarkers non-empty — concrete phishing-kit fingerprints found in inline scripts: \`clearbit-logo\` (logo.clearbit.com fetched dynamically by victim email domain), \`screenshotmachine\` (victim company homepage used as blurred background), or \`atob-url:\` (base64-decoded credential-exfil endpoint). Each is a strong phishing indicator on its own; combined with a password input the page is almost certainly a credential-harvesting kit, regardless of how legitimate the visible host or branding looks.
 
 Limitations:
 - Subdomains of hosting services (Cloudflare, AWS, Azure, Netlify, pages.dev, weebly.com) should NOT be assumed legitimate even if their WHOIS is legitimate.
@@ -1209,6 +1210,22 @@ async function applyOverrides(verdict, extracted, url) {
     overrides.push({ rule: "O4", sev: "danger", reason: `위험 URI 스킴 링크: ${dangerUris.slice(0,3).join(", ")}` });
     verdict.phishing = true;
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
+  }
+
+  // [O7] Phishing kit Tier-1 시그너처 + credential 폼.
+  // logo.clearbit.com / api.screenshotmachine.com / atob() → URL 같은 패턴은 정상 사이트에서
+  // 거의 안 나오는 키트 디자인 패턴 (피해자 이메일 도메인 기반 동적 브랜딩, base64 난독화된
+  // exfil 엔드포인트). 같은 페이지에 password input 까지 있으면 brand 인식 실패하더라도 확정.
+  const kitMarkers = extracted?.behaviors?.phishingKitMarkers || [];
+  if (kitMarkers.length > 0 && hasCredentialLikeForms(extracted)) {
+    overrides.push({
+      rule: "O7",
+      sev: "danger",
+      reason: `Phishing kit 시그너처 (${kitMarkers.slice(0,3).join(", ")}) + credential 폼`
+    });
+    verdict.phishing = true;
+    verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
+    verdict.suspicious_domain = true;
   }
 
   // [D1] 영구 denylist hit — 이전에 phishing(>=7)으로 확정된 호스트.

@@ -69,10 +69,39 @@
     }
   }
 
-  // 인라인 script 본문 → clipboard.writeText literal 추출
+  // Phishing kit signature markers — Tier 1 (정상 사이트에서 거의 안 나오는 패턴).
+  // - clearbit-logo: logo.clearbit.com/${domain} — 피해자 이메일 도메인 기반 로고 동적 페치
+  // - screenshotmachine: 피해자 회사 페이지 스크린샷을 배경으로 깖
+  // - atob-url: atob() 결과가 ../*.php/.aspx 또는 http URL — 자격증명 exfil 엔드포인트 base64 난독화
+  const PHISHING_KIT_LITERALS = [
+    { re: /logo\.clearbit\.com\//i, tag: "clearbit-logo" },
+    { re: /api\.screenshotmachine\.com/i, tag: "screenshotmachine" }
+  ];
+  const ATOB_LITERAL_RE = /atob\(\s*['"`]([A-Za-z0-9+/=]{8,200})['"`]\s*\)/g;
+  const ATOB_DECODED_URL_RE = /^(?:\.\.?\/|https?:\/\/)|\.(?:php|aspx|asp|jsp|do|action|cgi)(?:$|\?)/i;
+  const phishingKitMarkersSet = new Set();
+  function collectPhishingKitMarkers(src) {
+    if (!src) return;
+    for (const { re, tag } of PHISHING_KIT_LITERALS) {
+      if (re.test(src)) phishingKitMarkersSet.add(tag);
+    }
+    ATOB_LITERAL_RE.lastIndex = 0;
+    let m;
+    while ((m = ATOB_LITERAL_RE.exec(src)) && phishingKitMarkersSet.size < 16) {
+      try {
+        const decoded = atob(m[1]);
+        if (ATOB_DECODED_URL_RE.test(decoded)) {
+          phishingKitMarkersSet.add("atob-url:" + decoded.slice(0, 80));
+        }
+      } catch {}
+    }
+  }
+
+  // 인라인 script 본문 → clipboard.writeText literal + phishing kit marker 추출
   for (const s of document.querySelectorAll("script:not([src])")) {
     const src = s.textContent || "";
     collectClipboardWriteLiterals(src, "inlineScriptLiteral");
+    collectPhishingKitMarkers(src);
   }
 
   // 1) 잡음 태그 제거 제거됨 (사용자 활성 탭에 주입되므로 DOM을 파괴하면 안 됨)
@@ -186,7 +215,8 @@
       socialHits,
       shellHits,
       copyButtons,
-      codeSnippets
+      codeSnippets,
+      phishingKitMarkers: [...phishingKitMarkersSet].slice(0, 8)
       // autoDownloads 는 SW 쪽 downloads.onCreated 핸들러가 머지
     }
   };
