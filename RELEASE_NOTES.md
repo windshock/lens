@@ -1,3 +1,23 @@
+# ScamGuard AI v0.1.24 Release Notes
+
+## 🧹 Built-in "Reset history" button in the popup
+
+Until now the only way to clear accumulated state was to paste a snippet into the service-worker console. That was fine when iterating on a fix, but cumbersome whenever a user just wanted a clean slate. The popup now exposes a single "검사 기록 초기화" (Reset history) button.
+
+### What gets cleared
+- `chrome.storage.session` — every key (verdict cache `v:…`, warning verdicts `verdict:…`, `lastVerdict`, RDAP cache `rdap:…`, CT cache `cert:…`, `safeDomains`, any legacy `allowlist` array).
+- `chrome.storage.local.phishingDenylist` — emptied.
+- `chrome.storage.local.allowlistHosts` — emptied.
+- Module-scope memory caches in the service worker (`_denylistCache`, `_allowlistCache`, `_userTrustedDomains`) are reset to `null` so the next lookup reloads from storage.
+
+### What is preserved
+- `chrome.storage.local.notifIcons` — keeps the runtime-generated action/notification icons so notifications don't briefly fall back to the placeholder icon.
+- Service-worker model session, availability state, download progress.
+
+The button is a low-weight ghost-styled link beneath the scan result, with a confirm dialog explaining the three categories that will be removed. After completion the popup result panel shows how many denylist / allowlist entries were dropped.
+
+---
+
 # ScamGuard AI v0.1.23 Release Notes
 
 ## 🔕 OWA auto-scan disabled

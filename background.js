@@ -1652,6 +1652,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (msg?.type === "resetHistory") {
+    (async () => {
+      try {
+        // 삭제 전 카운트 — 응답에 포함해서 사용자에게 보여줌.
+        const before = await chrome.storage.local.get(["phishingDenylist", "allowlistHosts"]);
+        const denylistEntries = (before.phishingDenylist || []).length;
+        const allowlistEntries = (before.allowlistHosts || []).length;
+
+        // 1) session storage 전체 비움 — verdict cache (v:), warning vid (verdict:),
+        //    lastVerdict, RDAP/CT 캐시 (rdap:/cert:), safeDomains, allowlist (legacy) 등.
+        await chrome.storage.session.clear();
+
+        // 2) local storage 의 denylist + 호스트 allowlist 만 비움. notifIcons 는 보존
+        //    (다시 생성 비용 발생 방지).
+        await chrome.storage.local.set({ phishingDenylist: [], allowlistHosts: [] });
+
+        // 3) 모듈 스코프 메모리 캐시 무효화 — 다음 isDenylisted/isAllowlisted/
+        //    getUserTrustedDomains 호출 시 storage 에서 fresh load.
+        _denylistCache = null;
+        _allowlistCache = null;
+        _userTrustedDomains = null;
+
+        console.log("history reset — cleared:", { denylistEntries, allowlistEntries });
+        sendResponse({ ok: true, cleared: { denylistEntries, allowlistEntries } });
+      } catch (e) {
+        console.warn("resetHistory failed:", e);
+        sendResponse({ ok: false, error: String(e?.message || e) });
+      }
+    })();
+    return true;
+  }
   if (msg?.type === "getVerdict") {
     if (msg.vid) {
       chrome.storage.session.get("verdict:" + msg.vid).then(o => {

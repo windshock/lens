@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ScamGuard AI",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "description": "Chrome 내장 Gemini Nano 기반 100% 온디바이스(Zero-Data) 피싱 및 스캠 탐지기.",
   "minimum_chrome_version": "138",
   "background": {

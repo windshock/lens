@@ -151,6 +151,35 @@ async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   $("url").textContent = tab?.url || "";
 
+  $("reset").addEventListener("click", async () => {
+    const ok = confirm(
+      "이 확장의 모든 검사 기록을 초기화합니다.\n" +
+      "- 영구 denylist (피싱 확정 호스트)\n" +
+      "- 영구 allowlist (사용자 허용 호스트)\n" +
+      "- 세션 verdict / RDAP / CT 캐시\n" +
+      "진행할까요?"
+    );
+    if (!ok) return;
+    $("reset").disabled = true;
+    const orig = $("reset").textContent;
+    $("reset").textContent = "초기화 중…";
+    try {
+      const r = await chrome.runtime.sendMessage({ type: "resetHistory" });
+      if (r?.ok) {
+        const c = r.cleared || {};
+        $("result").innerHTML =
+          `<div class="verdict v-ok">초기화 완료 — denylist ${c.denylistEntries ?? 0}개, allowlist ${c.allowlistEntries ?? 0}개 삭제 + 세션 캐시 비움.</div>`;
+      } else {
+        $("result").innerHTML = `<div class="verdict v-warn">초기화 실패: ${r?.error || "알 수 없음"}</div>`;
+      }
+    } catch (e) {
+      $("result").innerHTML = `<div class="verdict v-warn">초기화 오류: ${String(e?.message || e)}</div>`;
+    } finally {
+      $("reset").textContent = orig;
+      $("reset").disabled = false;
+    }
+  });
+
   $("scan").addEventListener("click", async () => {
     $("scan").disabled = true;
     let stopTicker = null;

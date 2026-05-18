@@ -13,6 +13,8 @@
     .url { font-size: 11px; word-break: break-all; color: #555; margin: 6px 0; }
     button { width: 100%; padding: 8px; border: 0; border-radius: 6px; background: #1f6feb; color: #fff; font-size: 13px; cursor: pointer; }
     button:disabled { background: #9ca3af; cursor: not-allowed; }
+    button.ghost { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; font-size: 11px; padding: 6px; margin-top: 8px; }
+    button.ghost:disabled { background: #f9fafb; color: #9ca3af; }
     .verdict { margin-top: 10px; padding: 8px; border-radius: 6px; font-size: 12px; }
     .v-ok     { background: #d1fae5; color: #064e3b; }
     .v-warn   { background: #fef3c7; color: #78350f; }
@@ -26,6 +28,7 @@
   <div class="url" id="url"></div>
   <button id="scan" disabled>현재 페이지 검사</button>
   <div id="result"></div>
+  <button id="reset" class="ghost" title="이 확장의 모든 검사 기록(denylist, allowlist, 세션 캐시)을 초기화합니다.">검사 기록 초기화</button>
   <script src="popup.js"></script>
 </body>
 </html>
