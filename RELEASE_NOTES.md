@@ -1,3 +1,13 @@
+# ScamGuard AI v0.1.23 Release Notes
+
+## 🔕 OWA auto-scan disabled
+
+The `owa.skplanet.com` content-script trigger (T3 in CLAUDE.md) is now disabled. The `owa_scan.js` and `owa_banner.css` files remain in the repository but are no longer injected; only `click_guard.js` keeps running on regular web pages.
+
+To re-enable later, restore the `https://owa.skplanet.com/*` block in the `content_scripts` array of `manifest.json`. No other code changes are needed — the SW's `verdict-banner` / `pg-summary` plumbing is still in place.
+
+---
+
 # ScamGuard AI v0.1.22 Release Notes
 
 ## 🔍 Multi-source ownership verification (RDAP + CT) and Microsoft auth domain expansion

@@ -12,7 +12,7 @@
 **4종 트리거:**
 1. 우클릭 컨텍스트 메뉴 "이 링크 피싱 검사"
 2. 툴바 액션 버튼 (현재 페이지 검사)
-3. `owa.skplanet.com` 자동 스캔 — 메일 본문에서 외부 링크 발견 시 자동 검사하고 anchor 옆에 색상 배지 주입
+3. ~~`owa.skplanet.com` 자동 스캔~~ — **v0.1.23 부터 비활성**. owa_scan.js / owa_banner.css 파일은 보존되어 있고 manifest.json 의 content_scripts 엔트리만 제거. 재활성화는 그 블록 복원만 하면 됨.
 4. 다운로드 시작 시 — 호스팅 페이지(`referrer`)를 검사, 피싱 판정이면 `chrome.downloads.cancel`
 
 **핵심 데이터 흐름:** SW → 숨김 탭으로 URL 렌더 → content script가 forms/anchors/imgs/text 직렬화 → offscreen document에서 Tesseract OCR + WHOIS HTML 파싱 → SW가 우선순위 슬라이스 빌드 → `LanguageModel.prompt(body, { responseConstraint: VERDICT_SCHEMA })` → 캐시(`chrome.storage.session`) + 알림/배너/다운로드 차단.
