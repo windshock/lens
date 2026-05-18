@@ -151,6 +151,40 @@ async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   $("url").textContent = tab?.url || "";
 
+  $("resetThis").addEventListener("click", async () => {
+    if (!tab?.url || !/^https?:/i.test(tab.url)) {
+      $("result").innerHTML = `<div class="verdict v-warn">검사 가능한 페이지가 아닙니다 (현재 탭: ${tab?.url || "(없음)"})</div>`;
+      return;
+    }
+    let host = "";
+    try { host = new URL(tab.url).hostname; } catch {}
+    const ok = confirm(
+      `${host ? `사이트 ${host}` : "현재 페이지"} 의 검사 기록만 초기화합니다.\n` +
+      "- denylist 에서 이 host 제거\n" +
+      "- 이 URL/host 의 verdict / RDAP / CT 캐시 제거\n" +
+      "- allowlist 와 다른 사이트 기록은 보존\n" +
+      "진행할까요?"
+    );
+    if (!ok) return;
+    $("resetThis").disabled = true;
+    const orig = $("resetThis").textContent;
+    $("resetThis").textContent = "초기화 중…";
+    try {
+      const r = await chrome.runtime.sendMessage({ type: "resetHistoryForUrl", url: tab.url });
+      if (r?.ok) {
+        $("result").innerHTML =
+          `<div class="verdict v-ok">초기화 완료 — host ${r.host || "(없음)"}, denylist ${r.denyRemoved ?? 0}개 + 세션 캐시 ${r.sessionRemoved ?? 0}개 삭제.</div>`;
+      } else {
+        $("result").innerHTML = `<div class="verdict v-warn">초기화 실패: ${r?.error || "알 수 없음"}</div>`;
+      }
+    } catch (e) {
+      $("result").innerHTML = `<div class="verdict v-warn">초기화 오류: ${String(e?.message || e)}</div>`;
+    } finally {
+      $("resetThis").textContent = orig;
+      $("resetThis").disabled = false;
+    }
+  });
+
   $("reset").addEventListener("click", async () => {
     const ok = confirm(
       "이 확장의 모든 검사 기록을 초기화합니다.\n" +

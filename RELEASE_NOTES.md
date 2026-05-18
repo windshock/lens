@@ -1,3 +1,23 @@
+# ScamGuard AI v0.1.26 Release Notes
+
+## ↺ Per-page reset is now also in the popup
+
+v0.1.25 added "Clear history & re-scan" on the red warning screen, but the same surgical reset wasn't reachable for pages that *did* pass — e.g. a site that was previously flagged but now you want to re-evaluate from scratch without first triggering the warning page again. The popup now exposes the same per-host reset directly.
+
+### Layout
+The popup now has two ghost buttons under the scan result:
+- **이 페이지 기록만 초기화** — new. Hits the same `resetHistoryForUrl` SW handler that the warning screen uses (added in v0.1.25), but seeded with the current active tab's URL.
+- **전체 검사 기록 초기화** — the existing nuke-all button, label clarified to reflect the contrast.
+
+### Behavior
+- For `http(s)://` URLs the popup confirms with the host name, calls the SW, and shows how many denylist entries and session-cache keys were removed.
+- For non-scannable URLs (chrome://, file://, extension pages, etc.) the popup shows an inline warning instead of calling the SW.
+- `allowlistHosts` and every other host's accumulated state stay untouched, identical to the warning-page button.
+
+No service-worker changes — same `resetHistoryForUrl` handler from v0.1.25.
+
+---
+
 # ScamGuard AI v0.1.25 Release Notes
 
 ## ↺ Per-page "Clear history & re-scan" on the warning screen
