@@ -1,3 +1,27 @@
+# ScamGuard AI v0.1.25 Release Notes
+
+## ↺ Per-page "Clear history & re-scan" on the warning screen
+
+The red `warning.html` page now offers a middle-ground option between *back away* and *trust this site forever*: clear the denylist + cache entries **only for this host**, then re-trigger a scan. If the site really is phishing, the next scan will catch it and the warning comes back; if it was a false positive, the user gets a fresh LLM verdict without nuking every other site's accumulated history.
+
+### Button layout
+- **안전하게 돌아가기** — closes the tab. Unchanged.
+- **이 페이지 기록 지우고 재검사** — new. See below.
+- **이 사이트 허용 후 계속** — adds the host to the persistent allowlist. Unchanged.
+
+### What "Clear history & re-scan" does
+The handler sends `{type: "resetHistoryForUrl", url}` to the service worker, which:
+1. Removes any `v:<sha256(url)>` and `verdict:<sha256(url)>` entries from `chrome.storage.session`, plus any other session verdict entries whose `url` resolves to the same host.
+2. Removes the host's hash from `chrome.storage.local.phishingDenylist`.
+3. Removes `rdap:<host>` and `cert:<host>` session caches so ownership re-checks fresh.
+4. Resets the in-memory `_denylistCache` so the next lookup reloads from storage.
+5. **Does not** touch `allowlistHosts` — a previously approved "trust this site" decision is preserved.
+6. **Does not** touch other sites' state.
+
+After completion, `warning.js` calls `location.replace(url)` so the tab navigates to the original URL. The service worker's `chrome.tabs.onUpdated` listener triggers `maybeScanNavigation`, which runs a fresh scan with all caches cold. If the deterministic overrides (O0–O7, D1) and the LLM all return safe this time, the user lands on the page; if any rule still fires `danger`, the red intercept comes back — only this time the user knows the kit signatures weren't a one-off cache artefact.
+
+---
+
 # ScamGuard AI v0.1.24 Release Notes
 
 ## 🧹 Built-in "Reset history" button in the popup

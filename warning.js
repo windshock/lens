@@ -39,6 +39,34 @@ async function init() {
     await chrome.runtime.sendMessage({ type: "closeTab" });
   });
 
+  $("rescan").addEventListener("click", async () => {
+    if (!url) return;
+    let host = "";
+    try { host = new URL(url).hostname; } catch {}
+    const hostLabel = host ? `사이트 ${host}` : "이 사이트";
+    const ok = confirm(
+      `${hostLabel} 의 denylist 와 캐시만 비우고 페이지를 다시 검사합니다.\n` +
+      "이 사이트가 정말 피싱이면 다시 차단되어 이 화면이 다시 뜹니다.\n" +
+      "(allowlist 와 다른 사이트의 기록은 영향 없음)\n" +
+      "진행할까요?"
+    );
+    if (!ok) return;
+    $("rescan").disabled = true;
+    try {
+      const r = await chrome.runtime.sendMessage({ type: "resetHistoryForUrl", url });
+      if (!r?.ok) {
+        alert(`초기화 실패: ${r?.error || "알 수 없음"}`);
+        $("rescan").disabled = false;
+        return;
+      }
+      // 비운 다음 원본 URL 로 이동 → SW 의 navigation 트리거가 fresh 검사 수행
+      location.replace(url);
+    } catch (e) {
+      alert(`초기화 오류: ${String(e?.message || e)}`);
+      $("rescan").disabled = false;
+    }
+  });
+
   $("proceed").addEventListener("click", async () => {
     if (!url) return;
     let host = "";

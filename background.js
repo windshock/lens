@@ -1652,6 +1652,54 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (msg?.type === "resetHistoryForUrl" && msg.url) {
+    (async () => {
+      try {
+        let host = "";
+        try { host = new URL(msg.url).hostname.toLowerCase(); } catch {}
+        // 1) 해당 URL 의 verdict 캐시 + warning vid 제거
+        const sessionKeysToRemove = [];
+        const urlHash = await sha256Hex(msg.url);
+        sessionKeysToRemove.push("v:" + urlHash, "verdict:" + urlHash);
+        // 같은 host 가 들어있는 다른 verdict cache 도 청소
+        const all = await chrome.storage.session.get();
+        for (const k of Object.keys(all)) {
+          const v = all[k];
+          if (k.startsWith("v:") || k.startsWith("verdict:")) {
+            if (v && typeof v === "object" && typeof v.url === "string") {
+              try { if (new URL(v.url).hostname.toLowerCase() === host) sessionKeysToRemove.push(k); }
+              catch {}
+            }
+          }
+        }
+        // 2) RDAP / CT 캐시 (host 키) 제거
+        if (host) sessionKeysToRemove.push("rdap:" + host, "cert:" + host);
+        // 3) host 가 safeDomains 에 있을 경우(현 PR 범위 외지만 동기화 위해) 그건 그대로 둠 — 다음 검사가 다시 채움.
+        if (sessionKeysToRemove.length) await chrome.storage.session.remove([...new Set(sessionKeysToRemove)]);
+
+        // 4) 영구 denylist 에서 host hash 제거
+        let denyRemoved = 0;
+        if (host) {
+          const hostHash = await sha256Hex(host);
+          const { phishingDenylist = [] } = await chrome.storage.local.get("phishingDenylist");
+          const filtered = phishingDenylist.filter(h => h !== hostHash);
+          denyRemoved = phishingDenylist.length - filtered.length;
+          if (denyRemoved > 0) await chrome.storage.local.set({ phishingDenylist: filtered });
+        }
+        // 5) host allowlist 는 의도와 다르므로 건드리지 않음 — "허용" 한 결정은 유지.
+
+        // 6) 모듈 메모리 캐시 무효화
+        _denylistCache = null;
+
+        console.log("resetHistoryForUrl:", { host, denyRemoved, sessionRemoved: sessionKeysToRemove.length });
+        sendResponse({ ok: true, host, denyRemoved, sessionRemoved: sessionKeysToRemove.length });
+      } catch (e) {
+        console.warn("resetHistoryForUrl failed:", e);
+        sendResponse({ ok: false, error: String(e?.message || e) });
+      }
+    })();
+    return true;
+  }
   if (msg?.type === "resetHistory") {
     (async () => {
       try {
