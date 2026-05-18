@@ -64,7 +64,9 @@ const OFFICIAL_DOMAINS = {
   "OpenAI":       ["openai.com", "chatgpt.com", "platform.openai.com"],
   "ChatGPT":      ["chatgpt.com", "openai.com"],
   "Meta":         ["meta.com", "facebook.com", "instagram.com", "whatsapp.com"],
-  "Microsoft":    ["microsoft.com", "office.com", "live.com", "outlook.com", "azure.com"],
+  "Microsoft":    ["microsoft.com", "office.com", "live.com", "outlook.com", "azure.com",
+                   "microsoftonline.com", "microsoft365.com", "office365.com",
+                   "msauth.net", "msftauth.net"],
   "Apple":        ["apple.com", "icloud.com"],
   "MetaMask":     ["metamask.io"],
   "Coinbase":     ["coinbase.com", "wallet.coinbase.com"],
@@ -490,6 +492,86 @@ async function fetchWhois(domain) {
   }
 }
 
+// rdap.org bootstrap — 표준 JSON 응답. yesnic 은 .com Verisign 응답에서 Registrant 가
+// redact 되지만, MarkMonitor 같은 registrar RDAP 가 더 풍부한 데이터를 노출하는 경우가
+// 있다(예: Microsoft/Apple 같은 corp 등록 도메인). 결과: "Registrant: <org>" 또는 빈 문자열.
+async function fetchRdap(domain) {
+  if (!domain) return "";
+  try {
+    const cacheKey = "rdap:" + domain;
+    const cached = await chrome.storage.session.get(cacheKey);
+    if (cached[cacheKey] !== undefined) return cached[cacheKey];
+    const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
+    const res = await fetch(url, { credentials: "omit" });
+    if (!res.ok) { await chrome.storage.session.set({ [cacheKey]: "" }); return ""; }
+    const data = await res.json();
+    const orgs = [];
+    function walkEntities(entities) {
+      if (!Array.isArray(entities)) return;
+      for (const e of entities) {
+        const roles = e.roles || [];
+        if (roles.includes("registrant") && Array.isArray(e.vcardArray) && Array.isArray(e.vcardArray[1])) {
+          for (const v of e.vcardArray[1]) {
+            if (!Array.isArray(v)) continue;
+            if (v[0] === "org" || v[0] === "fn") {
+              const val = typeof v[3] === "string" ? v[3] : (typeof v[2] === "string" ? v[2] : "");
+              if (val) orgs.push(val.trim());
+            }
+          }
+        }
+        if (e.entities) walkEntities(e.entities);
+      }
+    }
+    walkEntities(data.entities || []);
+    const out = orgs.length > 0 ? `Registrant: ${orgs[0].slice(0, 120)}` : "";
+    await chrome.storage.session.set({ [cacheKey]: out });
+    return out;
+  } catch (e) {
+    console.warn("RDAP fetch error:", e);
+    return "";
+  }
+}
+
+// 공용 CA — issuer Org 가 이쪽으로 나오면 브랜드 단서로 못 씀.
+const PUBLIC_CA_RE = /(let'?s\s*encrypt|digicert|sectigo|comodo|globalsign|godaddy|amazon|cloudflare|google\s+trust|starfield|entrust\b)/i;
+
+// Certificate Transparency 로그 — crt.sh JSON 응답의 issuer_name 에서 O=<brand> 추출.
+// 자체 CA 운영 브랜드(Microsoft Corporation, Apple Inc., Google Trust Services 등)의 cert 가
+// 발견되면 강한 소유권 증거. 공용 CA(DigiCert/Let's Encrypt 등)는 PUBLIC_CA_RE 로 거른다.
+async function fetchCertOrg(host) {
+  if (!host) return "";
+  try {
+    const cacheKey = "cert:" + host;
+    const cached = await chrome.storage.session.get(cacheKey);
+    if (cached[cacheKey] !== undefined) return cached[cacheKey];
+    const url = `https://crt.sh/?q=${encodeURIComponent(host)}&output=json&exclude=expired&deduplicate=Y`;
+    const res = await fetch(url, { credentials: "omit" });
+    if (!res.ok) { await chrome.storage.session.set({ [cacheKey]: "" }); return ""; }
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      await chrome.storage.session.set({ [cacheKey]: "" });
+      return "";
+    }
+    // 최근 10개만 검사 (대개 동일 issuer 가 반복됨)
+    for (const c of data.slice(0, 10)) {
+      const issuer = String(c.issuer_name || "");
+      // issuer_name 포맷 예: "C=US, O=Microsoft Corporation, CN=Microsoft Azure RSA TLS Issuing CA 03"
+      const m = issuer.match(/(?:^|,\s*)O\s*=\s*"?([^",]+)"?/);
+      if (!m) continue;
+      const org = m[1].trim();
+      if (!org || PUBLIC_CA_RE.test(org)) continue;
+      const out = `IssuerOrg: ${org.slice(0, 120)}`;
+      await chrome.storage.session.set({ [cacheKey]: out });
+      return out;
+    }
+    await chrome.storage.session.set({ [cacheKey]: "" });
+    return "";
+  } catch (e) {
+    console.warn("CT fetch error:", e);
+    return "";
+  }
+}
+
 // ───────────────────────── Prompt builder ─────────────────────────
 
 function joinAndCap(arr, totalCap) {
@@ -841,14 +923,23 @@ async function scanUrl(url, source, meta = {}) {
       await dispatchResult(source, url, safe, { ...meta, skipped: true });
       return safe;
     }
-    [ocr, whois] = await Promise.all([
+    const regDomain = registeredDomain(extracted.finalUrl || url);
+    let finalHostForCt = "";
+    try { finalHostForCt = new URL(extracted.finalUrl || url).hostname.toLowerCase(); } catch {}
+    const [ocrRes, whoisRes, rdapRes, certRes] = await Promise.all([
       extracted.imgs?.length
         ? sendToOffscreen({ type: "OCR", imgs: extracted.imgs, base: extracted.finalUrl }).catch(() => "")
         : Promise.resolve(""),
       internalDomain
         ? Promise.resolve("WHOIS lookup skipped (internal domain)")
-        : fetchWhois(registeredDomain(extracted.finalUrl || url))
+        : fetchWhois(regDomain),
+      internalDomain ? Promise.resolve("") : fetchRdap(regDomain).catch(() => ""),
+      internalDomain ? Promise.resolve("") : fetchCertOrg(finalHostForCt).catch(() => "")
     ]);
+    ocr = ocrRes;
+    // yesnic + RDAP + CT 결과를 한 줄로 합쳐 LLM 과 applyOverrides 가 같은 문자열을 본다.
+    whois = [whoisRes, rdapRes, certRes].filter(Boolean).join(" | ");
+    if (!whois) whois = "WHOIS lookup failed";
   } catch (e) {
     console.warn("extract/whois/ocr failed:", e);
     extracted = extracted || { finalUrl: url, forms: [], anchors: [], imgs: [], visibleText: "" };
@@ -884,7 +975,7 @@ async function scanUrl(url, source, meta = {}) {
   }
   verdict.brand = normalizeBrand(verdict.brand);
   // ── 결정론적 후처리 오버라이드 ──
-  await applyOverrides(verdict, extracted, url);
+  await applyOverrides(verdict, extracted, url, whois);
   // 강한 phishing 으로 확정된 호스트는 영구 denylist 에 기록.
   // O5/O6 가 우회한 케이스는 verdict.phishing 이 false 가 되므로 자연스럽게 제외.
   if (verdict.phishing === true && (verdict.phishing_score ?? 0) >= 7) {
@@ -1063,7 +1154,7 @@ async function getUserTrustedDomains() {
   return trusted;
 }
 
-async function applyOverrides(verdict, extracted, url) {
+async function applyOverrides(verdict, extracted, url, whois = "") {
   const overrides = [];
   let finalHost = "", origHost = "";
   try { finalHost = new URL(extracted?.finalUrl || url).hostname.toLowerCase(); } catch {}
@@ -1083,8 +1174,34 @@ async function applyOverrides(verdict, extracted, url) {
     verdict.suspicious_domain = true;
   }
 
+  // [O1-whois] brand 가 RDAP Registrant 또는 CT issuer Org 와 매칭되면 OFFICIAL_DOMAINS
+  // 등록 여부와 무관하게 정식 도메인으로 인정 — 큐레이션 갭(예: microsoftonline.com)을 자동 보강.
+  // 매칭 대상: "Registrant: Microsoft Corporation" 또는 "IssuerOrg: Microsoft Corporation" 등.
+  if (verdict.brand && whois) {
+    const brandRaw = verdict.brand.toLowerCase().replace(/\s+ai\b/i, "").trim();
+    const brandTokens = [brandRaw, ...brandRaw.split(/\s+/)]
+      .map(t => t.replace(/[^a-z0-9]/g, ""))
+      .filter(t => t.length >= 4);
+    const whoisLower = whois.toLowerCase();
+    const whoisHasBrand = brandTokens.some(t => whoisLower.includes(t));
+    if (whoisHasBrand) {
+      overrides.push({
+        rule: "O1-whois",
+        sev: "safe",
+        reason: `WHOIS/RDAP/CT 가 브랜드 '${verdict.brand}' 와 일치 — 정식 도메인 추정`,
+        suppressModelReason: true
+      });
+      verdict.phishing = false;
+      verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+      verdict.suspicious_domain = false;
+      // O1 brand-mismatch 분기 진입 안 함 — 자동 검증으로 충분.
+      // 단 다른 deterministic danger(O2 클립보드 셸/O3 자동 다운로드/O4 위험 URI/O7 키트 마커)는
+      // 아래에서 계속 검사되어 필요 시 danger 로 덮어쓴다.
+    }
+  }
+
   // [O1] 브랜드 ↔ 정식 도메인 불일치 (가장 흔한 사칭 케이스)
-  if (verdict.brand) {
+  if (verdict.brand && !overrides.some(o => o.rule === "O1-whois")) {
     const officialList = OFFICIAL_DOMAINS[verdict.brand]
       || OFFICIAL_DOMAINS[verdict.brand.replace(/\s+AI$/i, "")]
       || OFFICIAL_DOMAINS[verdict.brand.split(/\s+/)[0]];

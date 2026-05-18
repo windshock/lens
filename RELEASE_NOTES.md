@@ -1,3 +1,35 @@
+# ScamGuard AI v0.1.22 Release Notes
+
+## 🔍 Multi-source ownership verification (RDAP + CT) and Microsoft auth domain expansion
+
+`login.microsoftonline.com` — Microsoft's actual Entra ID sign-in endpoint — was flagged at `warn(6)` for "brand mismatch" because `OFFICIAL_DOMAINS["Microsoft"]` only listed five surface domains (microsoft.com, office.com, live.com, outlook.com, azure.com) and skipped the entire authentication/portal family. The LLM correctly identified the brand and even claimed the WHOIS matched — but the WHOIS string the model saw never carried any registrant identity at all (yesnic returns just 7 redacted basic fields on .com domains).
+
+Two parallel improvements:
+
+### 1) OFFICIAL_DOMAINS — Microsoft expansion (manual fast path)
+- Added `microsoftonline.com` (Entra ID), `microsoft365.com` (M365 portal), `office365.com` (legacy), `msauth.net` and `msftauth.net` (auth CDN).
+- Deliberately *not* added: `windows.net` and `sharepoint.com` — both expose customer-controlled subdomains (`*.cloudapp.windows.net`, `*.sharepoint.com` tenants) and a blanket wildcard would re-open shared-hosting bypass.
+
+### 2) Automated ownership verification (no curation required)
+
+When the model identifies a brand whose hostname is not in `OFFICIAL_DOMAINS`, two independent sources are now consulted in parallel with the yesnic lookup:
+
+- **RDAP** (`https://rdap.org/domain/{registered_domain}`): the modern JSON replacement for WHOIS. We walk `entities[].roles == "registrant"` and pull the `vcardArray` `org` / `fn` value. .com Verisign records are usually GDPR-redacted, but MarkMonitor and several other corporate registrars expose `Registrant: Microsoft Corporation` style entries for big brands.
+- **Certificate Transparency** (`crt.sh/?q={host}&output=json&exclude=expired`): pulls the recent issued-cert list and reads `issuer_name` for `O=<org>`. Public CAs (Let's Encrypt, DigiCert, Sectigo, GlobalSign, Amazon Trust, Cloudflare, Google Trust Services, GoDaddy, Entrust) are filtered out — what remains is brand-operated issuing CAs like `Microsoft Corporation`'s internal Azure RSA CAs or `Apple Inc.`'s public CA chain.
+
+Both sources are cached per-host in `chrome.storage.session` to avoid re-querying within a session, and both feed into a single `whois` string that's passed to (a) the LLM prompt and (b) `applyOverrides`.
+
+### 3) New rule `O1-whois`
+
+Before the existing O1 mismatch comparison, `applyOverrides` now checks whether the brand the LLM identified appears as a token (≥4 chars) inside the combined `whois` string. If it does, the override pushes a `safe` outcome (`phishing = false`, score capped at 3) and the O1 mismatch path is skipped entirely. O2 / O3 / O4 / O7 / D1 still run after — so a domain that passes ownership verification but later triggers a credential-form kit signature still gets flagged.
+
+Together this means:
+- `login.microsoftonline.com` immediately resolves via OFFICIAL_DOMAINS expansion.
+- A future Microsoft auth subdomain that we forget to add manually still passes via RDAP/CT, no extension update needed.
+- Real attackers can't trivially set `Registrant: Microsoft Corporation` because registrars verify corporate identity, and they can't get an EV cert with `O = Microsoft Corporation` issued by Microsoft's internal CA without breaching Microsoft.
+
+---
+
 # ScamGuard AI v0.1.21 Release Notes
 
 ## 🎯 O7 — Deterministic phishing-kit fingerprints
