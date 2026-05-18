@@ -2,6 +2,9 @@
 // 4종 트리거(우클릭/툴바/OWA/다운로드)를 단일 scanUrl()로 수렴.
 // 모델: Chrome built-in Gemini Nano (LanguageModel). 폴백 없음.
 
+// i18n — globalThis.t, globalThis.initI18n 등을 등록.
+import "./i18n.js";
+
 const SYS = `You are a security expert. Determine if the webpage is phishing or legitimate.
 
 Instructions:
@@ -1001,7 +1004,11 @@ function severityFor(v) {
 }
 
 async function notify(severity, title, body, verdictId) {
-  const prefix = { ok: "[안전]", warn: "[주의]", danger: "[피싱]" };
+  const prefix = {
+    ok:     t("notif.prefixOk"),
+    warn:   t("notif.prefixWarn"),
+    danger: t("notif.prefixDanger")
+  };
   const { notifIcons = {} } = await chrome.storage.local.get("notifIcons");
   const iconUrl = notifIcons[severity] || FALLBACK_NOTIF_ICON;
   await chrome.notifications.create(verdictId || `v_${Date.now()}`, {
@@ -1439,9 +1446,9 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
 
 async function dispatchResult(source, url, verdict, meta) {
   const sev = severityFor(verdict);
-  const head = sev === "danger" ? "피싱 의심" : sev === "warn" ? "주의" : "안전";
+  const head = sev === "danger" ? t("notif.headDanger") : sev === "warn" ? t("notif.headWarn") : t("notif.headOk");
   const reason = verdict.reason || "";
-  const tail = meta?.cached ? " (캐시)" : meta?.skipped ? " (사내 도메인)" : meta?.allowed ? " (사용자 허용)" : "";
+  const tail = meta?.cached ? t("notif.tailCached") : meta?.skipped ? t("notif.tailSkipped") : meta?.allowed ? t("notif.tailAllowed") : "";
 
   if (source === "owa" && meta?.tabId != null) {
     try {

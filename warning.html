@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="ko">
+<html data-i18n-doctitle="warning.title">
 <head>
   <meta charset="utf-8">
-  <title>피싱 의심 페이지</title>
+  <title>Suspected phishing page</title>
   <link rel="stylesheet" href="warning.css">
 </head>
 <body>
@@ -15,27 +15,27 @@
       </svg>
     </div>
 
-    <h1>이 페이지는 피싱으로 의심됩니다</h1>
-    <p class="subtitle">계정 탈취·금전 피해 위험이 있습니다. 가능한 한 접근하지 마세요.</p>
+    <h1 data-i18n="warning.heading">This page is suspected of phishing</h1>
+    <p class="subtitle" data-i18n="warning.subtitle">Account theft and financial harm are possible. Avoid this page if possible.</p>
 
     <section class="card">
-      <div class="row"><span class="label">URL</span><code id="url" class="value mono"></code></div>
-      <div class="row"><span class="label">위험도</span><span id="score" class="value score"></span></div>
-      <div class="row"><span class="label">브랜드</span><span id="brand" class="value"></span></div>
-      <div class="row reason-row"><span class="label">사유</span><p id="reason" class="value reason"></p></div>
+      <div class="row"><span class="label" data-i18n="warning.label.url">URL</span><code id="url" class="value mono"></code></div>
+      <div class="row"><span class="label" data-i18n="warning.label.score">Risk</span><span id="score" class="value score"></span></div>
+      <div class="row"><span class="label" data-i18n="warning.label.brand">Brand</span><span id="brand" class="value"></span></div>
+      <div class="row reason-row"><span class="label" data-i18n="warning.label.reason">Reason</span><p id="reason" class="value reason"></p></div>
     </section>
 
     <div class="actions">
-      <button id="back" class="primary">안전하게 돌아가기</button>
-      <button id="rescan" class="ghost" title="이 호스트의 denylist/캐시만 비우고 다시 검사합니다. 정말 피싱이면 다시 차단됩니다.">이 페이지 기록 지우고 재검사</button>
-      <button id="proceed" class="ghost">이 사이트 허용 후 계속</button>
+      <button id="back" class="primary" data-i18n="warning.btnBack">Go back safely</button>
+      <button id="rescan" class="ghost" data-i18n="warning.btnRescan" data-i18n-title="warning.tipRescan">Clear this page's history &amp; re-scan</button>
+      <button id="proceed" class="ghost" data-i18n="warning.btnProceed">Allow this site and continue</button>
     </div>
 
-    <p class="footnote">
-      이 경고는 Chrome 내장 Gemini Nano 온디바이스 분석에 따른 추정치입니다.
-      <br>오탐일 수 있으며, 의심스럽다면 IT 보안 담당자에게 문의하세요.
+    <p class="footnote" id="footnote">
+      This warning is an estimate from Chrome's built-in Gemini Nano on-device analysis.<br>False positives are possible — ask your IT security team if unsure.
     </p>
   </main>
+  <script src="i18n.js"></script>
   <script src="warning.js"></script>
 </body>
 </html>

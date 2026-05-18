@@ -1,3 +1,33 @@
+# ScamGuard AI v0.1.27 Release Notes
+
+## 🌐 Bilingual UI — English by default, Korean as a runtime toggle
+
+The extension was previously Korean-only in its user-facing chrome (popup, warning page, verdict detail page, notification titles). Non-Korean users couldn't make sense of the buttons. This release switches the default to English and adds a one-click Korean toggle without re-loading the extension.
+
+### What's translated
+- **Popup** — heading, status messages (model ready / preparing / unavailable / error), the scan stage ticker, verdict severity labels, the two reset buttons and their tooltips, all confirm and result strings.
+- **Warning page** (`warning.html`) — heading, subtitle, field labels (URL / Risk / Brand / Reason), all three action buttons, the rescan-tip tooltip, the footnote, and both proceed/rescan confirm dialogs.
+- **Verdict detail page** (`verdict.html`) — heading, severity badge label, brand / suspicious-domain / phishing rows, Yes / No, action buttons, scanned-at line, the allow-this-site confirm and alert messages.
+- **Notification titles** — the `[Phishing]` / `[Caution]` / `[Safe]` prefix and head text, plus the trailing `(cached)` / `(internal domain)` / `(user allowed)` qualifier.
+
+### What's deliberately *not* translated
+- **LLM verdict reason text** — the `reason` field is generated in English by Gemini Nano (the SYS prompt requires English output).
+- **Service-worker override prefixes** (`[자동 오버라이드: O1] 브랜드 도메인 불일치 …`) — these stay in Korean for now. They're rendered inside `reason` so a Korean-mode user reads a Korean prefix + English LLM sentence; an English-mode user reads the same Korean prefix mixed with English. Future release will key these by language too.
+- **Service-worker SYS prompt** — always English; only the LLM sees it.
+- **CLAUDE.md** — developer documentation, stays Korean.
+
+### How the toggle works
+- New `i18n.js` is loaded by every UI page (`popup.html`, `warning.html`, `verdict.html`) via a classic `<script src>` tag, and by the service worker via ESM `import "./i18n.js"`. The file exposes `initI18n() / t(key, …args) / setLang(lang) / getLang() / applyI18nDom(root)` on `globalThis`.
+- The language is persisted in `chrome.storage.local.lang` (`"en"` by default, `"ko"` to switch). The service worker listens on `chrome.storage.onChanged` for live updates so notifications fired right after a switch use the new language.
+- The popup heading hosts a tiny `EN | 한국어` toggle; clicking it calls `setLang(...)` and re-applies the DOM translations and the dynamic status text without closing the popup.
+- HTML elements opt in to translation with `data-i18n="key"` (text) or `data-i18n-title="key"` (tooltips); `<html data-i18n-doctitle="key">` retitles the tab.
+
+### Storage / behaviour
+- No new permissions.
+- `chrome.storage.local.lang` is added (`"en"` or `"ko"`). It survives both reset buttons — the "Reset all scan history" handler only touches `phishingDenylist` and `allowlistHosts`, intentionally leaving the language preference and `notifIcons` alone.
+
+---
+
 # ScamGuard AI v0.1.26 Release Notes
 
 ## ↺ Per-page reset is now also in the popup

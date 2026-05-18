@@ -1,10 +1,12 @@
 // verdict.js — popup 또는 알림 클릭에서 호출되는 상세 페이지.
 
-const SEVS = {
-  danger: { label: "피싱 의심", color: "#b91c1c" },
-  warn:   { label: "주의",      color: "#d97706" },
-  ok:     { label: "안전",      color: "#1f883d" }
-};
+function sevsForCurrentLang() {
+  return {
+    danger: { label: t("verdict.sevDanger"), color: "#b91c1c" },
+    warn:   { label: t("verdict.sevWarn"),   color: "#d97706" },
+    ok:     { label: t("verdict.sevOk"),     color: "#1f883d" }
+  };
+}
 
 function sevFor(v) {
   if (!v) return "ok";
@@ -16,6 +18,9 @@ function sevFor(v) {
 function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
 
 (async () => {
+  await initI18n();
+  document.title = t("verdict.heading");
+
   const params = new URLSearchParams(location.search);
   const targetUrl = params.get("url");
 
@@ -31,17 +36,17 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","
   }
   const root = document.getElementById("root");
   if (!v) {
-    root.innerHTML = "<p>최근 검사 기록이 없습니다.</p>";
+    root.innerHTML = `<p>${esc(t("verdict.empty"))}</p>`;
     return;
   }
   const sev = sevFor(v);
-  const cfg = SEVS[sev];
+  const cfg = sevsForCurrentLang()[sev];
   const score = v.phishing_score ?? 0;
   const pct = Math.min(100, Math.max(0, score * 10));
   const ts = v.ts ? new Date(v.ts).toLocaleString() : "";
 
   root.innerHTML = `
-    <h1>최근 검사 결과 <span class="badge ${sev}">${cfg.label}</span></h1>
+    <h1>${esc(t("verdict.heading"))} <span class="badge ${sev}">${esc(cfg.label)}</span></h1>
     <div class="url">${esc(v.url || "")}</div>
 
     <div class="grid">
@@ -49,20 +54,20 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","
         <span class="num">${score}</span><span class="denom">/10</span>
       </div>
       <div class="signals">
-        <div class="sig"><span class="k">브랜드</span><span class="v">${esc(v.brand) || "(미확인)"}</span></div>
-        <div class="sig"><span class="k">의심 도메인</span><span class="v ${v.suspicious_domain ? "bad" : "ok"}">${v.suspicious_domain ? "예" : "아니오"}</span></div>
-        <div class="sig"><span class="k">피싱 판정</span><span class="v ${v.phishing ? "bad" : "ok"}">${v.phishing ? "예" : "아니오"}</span></div>
+        <div class="sig"><span class="k">${esc(t("verdict.label.brand"))}</span><span class="v">${esc(v.brand) || esc(t("verdict.brandUnknown"))}</span></div>
+        <div class="sig"><span class="k">${esc(t("verdict.label.suspicious"))}</span><span class="v ${v.suspicious_domain ? "bad" : "ok"}">${v.suspicious_domain ? esc(t("verdict.yes")) : esc(t("verdict.no"))}</span></div>
+        <div class="sig"><span class="k">${esc(t("verdict.label.phishing"))}</span><span class="v ${v.phishing ? "bad" : "ok"}">${v.phishing ? esc(t("verdict.yes")) : esc(t("verdict.no"))}</span></div>
       </div>
     </div>
 
     <div class="reason">${esc(v.reason || "")}</div>
 
     <div class="actions">
-      <button id="allow" class="warn">이 사이트 허용</button>
-      <button id="close">닫기</button>
+      <button id="allow" class="warn">${esc(t("verdict.btnAllow"))}</button>
+      <button id="close">${esc(t("verdict.btnClose"))}</button>
     </div>
 
-    <div class="ts">검사 시각: ${ts}</div>
+    <div class="ts">${esc(t("verdict.scannedAt"))} ${esc(ts)}</div>
     <pre>${esc(JSON.stringify(v, null, 2))}</pre>
   `;
 
@@ -71,9 +76,11 @@ function esc(s) { return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","
     if (!v.url) return;
     let host = "";
     try { host = new URL(v.url).hostname; } catch {}
-    const hostLabel = host ? `사이트 ${host}` : "이 사이트";
-    if (!confirm(`${hostLabel} 의 모든 페이지를 앞으로 검사하지 않습니다. 이 설정은 확장을 재설치하기 전까지 유지됩니다. 진행할까요?`)) return;
+    const hostLabel = host
+      ? t("verdict.confirmAllowHost", host)
+      : t("verdict.confirmAllowFallback");
+    if (!confirm(t("verdict.confirmAllow", hostLabel))) return;
     const res = await chrome.runtime.sendMessage({ type: "allowlist", url: v.url });
-    alert(res?.host ? `${res.host} 허용 등록되었습니다.` : "허용 등록되었습니다.");
+    alert(res?.host ? t("verdict.allowDone", res.host) : t("verdict.allowDoneFallback"));
   });
 })();

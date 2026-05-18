@@ -26,26 +26,26 @@ function showStatus(status) {
   const el = $("status");
   if (availability === "available") {
     el.className = "status ok";
-    el.textContent = "온디바이스 모델 사용 가능";
+    el.textContent = t("popup.statusOk");
     $("scan").disabled = false;
-    $("scan").textContent = "현재 페이지 검사";
+    $("scan").textContent = t("popup.btnScan");
   } else if (availability === "downloadable" || availability === "downloading") {
     el.className = "status dl";
     if (state.error) {
-      el.textContent = `모델 준비 실패 — ${state.error}`;
+      el.textContent = t("popup.statusError", String(state.error));
       $("scan").disabled = false;
-      $("scan").textContent = "모델 준비 재시도";
+      $("scan").textContent = t("popup.btnRetry");
     } else {
-      const phase = state.preparing || availability === "downloading" ? "모델 다운로드/준비 중" : "모델 다운로드 준비 중";
+      const phase = state.preparing || availability === "downloading" ? t("popup.statusDl") : t("popup.statusDlPrep");
       el.textContent = `${phase}${progressText(state.progress)}…`;
       $("scan").disabled = true;
-      $("scan").textContent = "모델 준비 중…";
+      $("scan").textContent = t("popup.btnPreparing");
     }
   } else {
     el.className = "status no";
-    el.textContent = "온디바이스 모델 사용 불가 — 확장 비활성";
+    el.textContent = t("popup.statusUnavailable");
     $("scan").disabled = true;
-    $("scan").textContent = "현재 페이지 검사";
+    $("scan").textContent = t("popup.btnScan");
   }
 }
 
@@ -92,37 +92,40 @@ async function prepareModelIfNeeded(status) {
   return normalizeStatus(prepared);
 }
 
-const STAGES = [
-  { at: 0,    label: "페이지 로드 중…" },
-  { at: 2500, label: "DOM/이미지 추출 중…" },
-  { at: 5000, label: "OCR + WHOIS 조회 중…" },
-  { at: 8000, label: "모델 추론 중…" }
-];
+function getStages() {
+  return [
+    { at: 0,    label: t("popup.stage0") },
+    { at: 2500, label: t("popup.stage1") },
+    { at: 5000, label: t("popup.stage2") },
+    { at: 8000, label: t("popup.stage3") }
+  ];
+}
 
 function startStageTicker() {
+  const STAGES = getStages();
   const result = $("result");
   let i = 0;
   result.innerHTML = `<div class="verdict v-warn" id="stage">${STAGES[0].label}</div>`;
   const stage = document.getElementById("stage");
   const start = Date.now();
-  const t = setInterval(() => {
+  const tt = setInterval(() => {
     const elapsed = Date.now() - start;
     while (i + 1 < STAGES.length && elapsed >= STAGES[i + 1].at) i++;
-    stage.textContent = STAGES[i].label + " (" + Math.round(elapsed / 1000) + "s)";
+    stage.textContent = t("popup.stageElapsed", STAGES[i].label, Math.round(elapsed / 1000));
   }, 500);
-  return () => clearInterval(t);
+  return () => clearInterval(tt);
 }
 
 function renderVerdict(v) {
   const box = $("result");
   if (!v) { box.innerHTML = ""; return; }
   if (v.error) {
-    box.innerHTML = `<div class="verdict v-warn">오류: ${v.error}</div>`;
+    box.innerHTML = `<div class="verdict v-warn">${t("popup.error", String(v.error))}</div>`;
     return;
   }
   const sev = v.phishing || (v.phishing_score ?? 0) >= 7 ? "danger"
             : (v.phishing_score ?? 0) >= 4 ? "warn" : "ok";
-  const label = sev === "danger" ? "피싱 의심" : sev === "warn" ? "주의" : "안전";
+  const label = sev === "danger" ? t("popup.verdictDanger") : sev === "warn" ? t("popup.verdictWarn") : t("popup.verdictOk");
   const score = v.phishing_score ?? 0;
   const reason = (v.reason || "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   box.innerHTML = `
@@ -132,7 +135,7 @@ function renderVerdict(v) {
         <span style="font-size:11px;">${score}/10${v.brand ? " · " + v.brand : ""}</span>
       </div>
       <div class="reason">${reason}</div>
-      <div style="margin-top:6px;"><a href="#" id="detail" style="font-size:11px;color:inherit;">자세히 보기</a></div>
+      <div style="margin-top:6px;"><a href="#" id="detail" style="font-size:11px;color:inherit;">${t("popup.detail")}</a></div>
     </div>`;
   const detail = document.getElementById("detail");
   if (detail) detail.addEventListener("click", (e) => {
@@ -142,7 +145,30 @@ function renderVerdict(v) {
   });
 }
 
+function refreshLangActive() {
+  const lang = (typeof getLang === "function") ? getLang() : "en";
+  $("lang-en").classList.toggle("active", lang === "en");
+  $("lang-ko").classList.toggle("active", lang === "ko");
+}
+
+async function switchLang(lang) {
+  await setLang(lang);
+  applyI18nDom(document);
+  document.title = t("popup.title");
+  refreshLangActive();
+  // status / scan 버튼 라벨은 동적 — refreshStatus 로 재렌더
+  await refreshStatus().catch(() => {});
+}
+
 async function init() {
+  await initI18n();
+  applyI18nDom(document);
+  document.title = t("popup.title");
+  refreshLangActive();
+
+  $("lang-en").addEventListener("click", () => switchLang("en"));
+  $("lang-ko").addEventListener("click", () => switchLang("ko"));
+
   const status = await refreshStatus();
   prepareModelIfNeeded(status).catch(e => {
     showStatus({ ...status, error: String(e?.message || e) });
@@ -153,32 +179,26 @@ async function init() {
 
   $("resetThis").addEventListener("click", async () => {
     if (!tab?.url || !/^https?:/i.test(tab.url)) {
-      $("result").innerHTML = `<div class="verdict v-warn">검사 가능한 페이지가 아닙니다 (현재 탭: ${tab?.url || "(없음)"})</div>`;
+      $("result").innerHTML = `<div class="verdict v-warn">${t("popup.notScannable", tab?.url || "(none)")}</div>`;
       return;
     }
     let host = "";
     try { host = new URL(tab.url).hostname; } catch {}
-    const ok = confirm(
-      `${host ? `사이트 ${host}` : "현재 페이지"} 의 검사 기록만 초기화합니다.\n` +
-      "- denylist 에서 이 host 제거\n" +
-      "- 이 URL/host 의 verdict / RDAP / CT 캐시 제거\n" +
-      "- allowlist 와 다른 사이트 기록은 보존\n" +
-      "진행할까요?"
-    );
+    const ok = confirm(t("popup.confirmResetThis", host || (getLang() === "ko" ? "현재 페이지" : "current page")));
     if (!ok) return;
     $("resetThis").disabled = true;
     const orig = $("resetThis").textContent;
-    $("resetThis").textContent = "초기화 중…";
+    $("resetThis").textContent = t("popup.resetting");
     try {
       const r = await chrome.runtime.sendMessage({ type: "resetHistoryForUrl", url: tab.url });
       if (r?.ok) {
         $("result").innerHTML =
-          `<div class="verdict v-ok">초기화 완료 — host ${r.host || "(없음)"}, denylist ${r.denyRemoved ?? 0}개 + 세션 캐시 ${r.sessionRemoved ?? 0}개 삭제.</div>`;
+          `<div class="verdict v-ok">${t("popup.resetDone", r.host || (getLang() === "ko" ? "(없음)" : "(none)"), r.denyRemoved ?? 0, r.sessionRemoved ?? 0)}</div>`;
       } else {
-        $("result").innerHTML = `<div class="verdict v-warn">초기화 실패: ${r?.error || "알 수 없음"}</div>`;
+        $("result").innerHTML = `<div class="verdict v-warn">${t("popup.resetFailed", r?.error || (getLang() === "ko" ? "알 수 없음" : "unknown"))}</div>`;
       }
     } catch (e) {
-      $("result").innerHTML = `<div class="verdict v-warn">초기화 오류: ${String(e?.message || e)}</div>`;
+      $("result").innerHTML = `<div class="verdict v-warn">${t("popup.error", String(e?.message || e))}</div>`;
     } finally {
       $("resetThis").textContent = orig;
       $("resetThis").disabled = false;
@@ -186,28 +206,22 @@ async function init() {
   });
 
   $("reset").addEventListener("click", async () => {
-    const ok = confirm(
-      "이 확장의 모든 검사 기록을 초기화합니다.\n" +
-      "- 영구 denylist (피싱 확정 호스트)\n" +
-      "- 영구 allowlist (사용자 허용 호스트)\n" +
-      "- 세션 verdict / RDAP / CT 캐시\n" +
-      "진행할까요?"
-    );
+    const ok = confirm(t("popup.confirmResetAll"));
     if (!ok) return;
     $("reset").disabled = true;
     const orig = $("reset").textContent;
-    $("reset").textContent = "초기화 중…";
+    $("reset").textContent = t("popup.resetting");
     try {
       const r = await chrome.runtime.sendMessage({ type: "resetHistory" });
       if (r?.ok) {
         const c = r.cleared || {};
         $("result").innerHTML =
-          `<div class="verdict v-ok">초기화 완료 — denylist ${c.denylistEntries ?? 0}개, allowlist ${c.allowlistEntries ?? 0}개 삭제 + 세션 캐시 비움.</div>`;
+          `<div class="verdict v-ok">${t("popup.resetDoneAll", c.denylistEntries ?? 0, c.allowlistEntries ?? 0)}</div>`;
       } else {
-        $("result").innerHTML = `<div class="verdict v-warn">초기화 실패: ${r?.error || "알 수 없음"}</div>`;
+        $("result").innerHTML = `<div class="verdict v-warn">${t("popup.resetFailed", r?.error || (getLang() === "ko" ? "알 수 없음" : "unknown"))}</div>`;
       }
     } catch (e) {
-      $("result").innerHTML = `<div class="verdict v-warn">초기화 오류: ${String(e?.message || e)}</div>`;
+      $("result").innerHTML = `<div class="verdict v-warn">${t("popup.error", String(e?.message || e))}</div>`;
     } finally {
       $("reset").textContent = orig;
       $("reset").disabled = false;
@@ -228,7 +242,7 @@ async function init() {
       const v = await chrome.runtime.sendMessage({ type: "scan", url: tab.url, tabId: tab.id, source: "popup" });
       renderVerdict(v);
     } catch (e) {
-      $("result").innerHTML = `<div class="verdict v-warn">오류: ${String(e)}</div>`;
+      $("result").innerHTML = `<div class="verdict v-warn">${t("popup.error", String(e))}</div>`;
     } finally {
       if (stopTicker) stopTicker();
       const status = await refreshStatus().catch(() => ({ availability: latestAvailability }));

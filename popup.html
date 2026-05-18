@@ -1,11 +1,14 @@
 <!doctype html>
-<html>
+<html data-i18n-doctitle="popup.title">
 <head>
   <meta charset="utf-8">
-  <title>피싱 검사기</title>
+  <title>Phishing Scanner</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; width: 320px; margin: 0; padding: 12px; }
-    h1 { font-size: 13px; margin: 0 0 8px; }
+    h1 { font-size: 13px; margin: 0 0 8px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .lang { font-size: 11px; color: #6b7280; }
+    .lang a { color: #1f6feb; text-decoration: none; cursor: pointer; }
+    .lang a.active { color: #111827; font-weight: 600; cursor: default; }
     .status { font-size: 12px; padding: 6px 8px; border-radius: 6px; margin-bottom: 8px; }
     .status.ok { background: #d1fae5; color: #064e3b; }
     .status.dl { background: #fef3c7; color: #78350f; }
@@ -23,13 +26,21 @@
   </style>
 </head>
 <body>
-  <h1>피싱 링크 검사기</h1>
-  <div id="status" class="status">상태 확인 중…</div>
+  <h1>
+    <span data-i18n="popup.heading">Phishing Link Scanner</span>
+    <span class="lang">
+      <a id="lang-en" class="active">EN</a>
+      <span> | </span>
+      <a id="lang-ko">한국어</a>
+    </span>
+  </h1>
+  <div id="status" class="status" data-i18n="popup.checking">Checking status…</div>
   <div class="url" id="url"></div>
-  <button id="scan" disabled>현재 페이지 검사</button>
+  <button id="scan" disabled data-i18n="popup.btnScan">Scan current page</button>
   <div id="result"></div>
-  <button id="resetThis" class="ghost" title="현재 탭 호스트의 denylist + verdict 캐시만 비웁니다. allowlist 와 다른 사이트 기록은 보존.">이 페이지 기록만 초기화</button>
-  <button id="reset" class="ghost" title="이 확장의 모든 검사 기록(denylist, allowlist, 세션 캐시)을 초기화합니다.">전체 검사 기록 초기화</button>
+  <button id="resetThis" class="ghost" data-i18n="popup.btnResetThis" data-i18n-title="popup.btnResetThisTip">Reset history for this page</button>
+  <button id="reset" class="ghost" data-i18n="popup.btnResetAll" data-i18n-title="popup.btnResetAllTip">Reset all scan history</button>
+  <script src="i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
