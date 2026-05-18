@@ -1,3 +1,21 @@
+# ScamGuard AI v0.1.20 Release Notes
+
+## 🔒 Elevate brand-mismatch + credential-form to danger
+
+Reported case: `https://rsig.org/rqq/flb/jHl5zffjk7Tkd6FmW8yBr90Uskjk7Tx4QsP13vW8yB#` — a Microsoft sign-in spoof hosted on a random `.org` domain, with `<input type="password" name="office_passwd">` and a pre-filled `<input type="hidden" name="email" value="jeff.kim@sk.com">` (clear spear-phishing kit signature). The page was flagged only at severity `warn` (score 6) and never triggered the full-screen red warning — only a yellow toast.
+
+### Why it slipped through
+The O1 override has two branches once a brand-vs-domain mismatch is detected:
+- If the offending host is on a free-hosting platform (`workers.dev`, `vercel.app`, `github.io`, …): elevate to danger when high-confidence phishing evidence is present.
+- Otherwise (any other domain, including `rsig.org`): cap at `score = 6`, severity `warn`, regardless of evidence.
+
+That asymmetry made sense for "stray brand mention on a normal site is rarely phishing", but it lost a real attack vector — short-lived random domains hosting a polished credential page.
+
+### Fix
+In the non-free-hosting branch, when `hasCredentialLikeForms` / auto-download / dangerous URI / shell clipboard payload is already on the page **and** the LLM identified a brand whose official domain does not match, escalate to `danger` (score ≥ 9, `phishing = true`). The plain mismatch-without-evidence case still stays at `warn(6)` — news articles, docs, and referrals quoting a brand on an unrelated domain are not phishing on their own.
+
+---
+
 # ScamGuard AI v0.1.14 Release Notes
 
 ## 🔧 Skip private IPs · Sync stale OWA summary bars

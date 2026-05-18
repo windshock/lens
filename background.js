@@ -1143,13 +1143,28 @@ async function applyOverrides(verdict, extracted, url) {
             }
           }
         } else {
-          overrides.push({
-            rule: "O1",
-            sev: "warn",
-            reason: `브랜드 도메인 불일치: '${verdict.brand}' 정식 도메인(${officialList[0]})이 아닌 ${offenders[0]}`
-          });
-          verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 6);
-          verdict.suspicious_domain = true;
+          // 일반(free-hosting 아닌) 도메인에서 브랜드 ↔ 도메인 불일치.
+          // 단독 mismatch 만으로는 정상 referral·뉴스·문서가 많아 warn(6) 으로 캡핑.
+          // 다만 password input/auto-download/위험 URI 같은 high-confidence 증거가 더 있으면
+          // rsig.org 류 깨끗해 보이는 도메인에서도 분명한 사칭 phishing 이므로 danger 로 elevate.
+          if (highConfidencePhishEvidence) {
+            overrides.push({
+              rule: "O1",
+              sev: "danger",
+              reason: `브랜드 사칭 + credential/위험 신호: '${verdict.brand}' 정식 도메인은 ${officialList[0]} 인데 페이지는 ${offenders[0]}`
+            });
+            verdict.phishing = true;
+            verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 9);
+            verdict.suspicious_domain = true;
+          } else {
+            overrides.push({
+              rule: "O1",
+              sev: "warn",
+              reason: `브랜드 도메인 불일치: '${verdict.brand}' 정식 도메인(${officialList[0]})이 아닌 ${offenders[0]}`
+            });
+            verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 6);
+            verdict.suspicious_domain = true;
+          }
         }
       } else {
         // 모든 호스트가 정식 도메인에 매칭 → 모델 오판정 완화 (강제 0이 아닌 상한 캡핑)
