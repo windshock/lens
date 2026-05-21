@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ScamGuard AI is a Chrome MV3 extension that helps detect gray-zone phishing and scam pages inside the browser with on-device AI and deterministic security rules.">
+  <meta property="og:title" content="ScamGuard AI">
+  <meta property="og:description" content="Browser-side phishing protection for gray-zone pages in the AI era.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://windshock.github.io/scamguard-ai/">
+  <title>ScamGuard AI</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./main.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="ScamGuard AI home">
+      <span class="brand-mark" aria-hidden="true">SG</span>
+      <span>ScamGuard AI</span>
+    </a>
+    <nav class="site-nav" aria-label="Primary navigation">
+      <a href="#why" data-i18n="navWhy">Why</a>
+      <a href="#workflow" data-i18n="navWorkflow">Workflow</a>
+      <a href="#signals" data-i18n="navSignals">Signals</a>
+      <a href="#roadmap" data-i18n="navRoadmap">Roadmap</a>
+    </nav>
+    <div class="language-switch" role="group" aria-label="Language">
+      <button type="button" data-lang-switch="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang-switch="ko" aria-pressed="false">한국어</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow" data-i18n="heroEyebrow">Chrome MV3 · on-device AI · defensive research</p>
+        <h1>ScamGuard AI</h1>
+        <p class="hero-lede" data-i18n="heroLead">
+          Browser-side phishing protection for gray-zone pages in the AI era.
+        </p>
+        <p class="hero-body" data-i18n="heroBody">
+          ScamGuard AI combines local page extraction, deterministic security rules, OCR, domain ownership signals, and on-device Gemini Nano analysis to help evaluate suspicious pages without sending page content to external LLM APIs.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/windshock/scamguard-ai" data-i18n="actionGithub">View on GitHub</a>
+          <a class="button secondary" href="#workflow" data-i18n="actionWorkflow">How it works</a>
+        </div>
+      </div>
+
+      <figure class="product-visual" aria-label="ScamGuard AI risk triage interface preview">
+        <div class="browser-shell">
+          <div class="browser-bar">
+            <span class="address">https://login.example.test</span>
+          </div>
+          <div class="scan-pane">
+            <div class="verdict-row">
+              <div>
+                <span class="small-label" data-i18n="visualLabel">Current verdict</span>
+                <strong data-i18n="visualVerdict">High risk, evidence-based</strong>
+              </div>
+              <span class="score-badge">82</span>
+            </div>
+            <div class="signal-board" aria-hidden="true">
+              <span class="signal danger" data-i18n="visualSignal1">Credential form</span>
+              <span class="signal warning" data-i18n="visualSignal2">Brand mismatch</span>
+              <span class="signal danger" data-i18n="visualSignal3">Kit marker</span>
+              <span class="signal neutral" data-i18n="visualSignal4">RDAP/CT checked</span>
+            </div>
+            <div class="flow">
+              <span data-i18n="visualFlow1">Extract</span>
+              <span data-i18n="visualFlow2">Precheck</span>
+              <span data-i18n="visualFlow3">Analyze</span>
+              <span data-i18n="visualFlow4">Warn</span>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="summary-strip" aria-label="Project highlights">
+      <div>
+        <strong data-i18n="summaryOneTitle">100% local page-content analysis</strong>
+        <span data-i18n="summaryOneBody">Browsing context stays on the device.</span>
+      </div>
+      <div>
+        <strong data-i18n="summaryTwoTitle">Complements Safe Browsing</strong>
+        <span data-i18n="summaryTwoBody">Focuses on zero-hour and targeted gray-zone pages.</span>
+      </div>
+      <div>
+        <strong data-i18n="summaryThreeTitle">Rules and AI together</strong>
+        <span data-i18n="summaryThreeBody">Hard evidence is not reduced to a generic score.</span>
+      </div>
+    </section>
+
+    <section id="why" class="content-section">
+      <div class="section-heading">
+        <p class="eyebrow" data-i18n="whyEyebrow">Origin</p>
+        <h2 data-i18n="whyTitle">Built from real defensive observations</h2>
+        <p data-i18n="whyBody">
+          Modern phishing pages abuse normal infrastructure, imitate trusted software, and adapt their login screens after rendering. ScamGuard AI was shaped by field observations of AI client impersonation, fake software download pages, and enterprise sign-in phishing kits.
+        </p>
+      </div>
+      <div class="feature-grid">
+        <article>
+          <h3 data-i18n="originOneTitle">AI client impersonation</h3>
+          <p data-i18n="originOneBody">Pages that mimic popular AI tools or installers to capture trust before a download or login flow.</p>
+        </article>
+        <article>
+          <h3 data-i18n="originTwoTitle">Fake software downloads</h3>
+          <p data-i18n="originTwoBody">Lookalike download journeys that can push suspicious files or deceptive instructions.</p>
+        </article>
+        <article>
+          <h3 data-i18n="originThreeTitle">Enterprise sign-in kits</h3>
+          <p data-i18n="originThreeBody">Rendered login pages with reusable kit behavior, prefilled identity hints, and off-origin collection paths.</p>
+        </article>
+        <article>
+          <h3 data-i18n="originFourTitle">Normal infrastructure abuse</h3>
+          <p data-i18n="originFourBody">Phishing hosted on shared platforms, workers, pages, or static hosting that reputation systems may not classify yet.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="split-section">
+      <div>
+        <p class="eyebrow" data-i18n="focusEyebrow">Positioning</p>
+        <h2 data-i18n="focusTitle">A browser-side triage layer</h2>
+      </div>
+      <div class="split-copy">
+        <p data-i18n="focusBody">
+          ScamGuard AI is not a replacement for Chrome Safe Browsing, a cloud scanner, a generic antivirus, or a thin LLM wrapper. It is a local triage layer for suspicious rendered pages that need evidence-aware judgment before the user continues.
+        </p>
+        <ul class="check-list">
+          <li data-i18n="focusItem1">Zero-hour phishing and spear-phishing</li>
+          <li data-i18n="focusItem2">Brand impersonation with credential forms</li>
+          <li data-i18n="focusItem3">Fake download and clipboard-abuse flows</li>
+          <li data-i18n="focusItem4">Rendered-page behavior visible only after load</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="workflow" class="content-section alt">
+      <div class="section-heading">
+        <p class="eyebrow" data-i18n="workflowEyebrow">Workflow</p>
+        <h2 data-i18n="workflowTitle">How ScamGuard AI evaluates a page</h2>
+        <p data-i18n="workflowBody">
+          The extension keeps page inspection inside the browser and combines direct evidence with contextual analysis only when needed.
+        </p>
+      </div>
+      <ol class="workflow-list">
+        <li>
+          <span>1</span>
+          <div>
+            <h3 data-i18n="stepOneTitle">Inspect link, page, or download</h3>
+            <p data-i18n="stepOneBody">A clicked link, current page, or suspicious download starts a local scan.</p>
+          </div>
+        </li>
+        <li>
+          <span>2</span>
+          <div>
+            <h3 data-i18n="stepTwoTitle">Extract rendered signals</h3>
+            <p data-i18n="stepTwoBody">DOM, forms, scripts, OCR text, and domain ownership signals are collected without external LLM calls.</p>
+          </div>
+        </li>
+        <li>
+          <span>3</span>
+          <div>
+            <h3 data-i18n="stepThreeTitle">Separate hard evidence from ambiguity</h3>
+            <p data-i18n="stepThreeBody">Strong markers such as phishing-kit behavior or dangerous clipboard payloads should be handled deterministically.</p>
+          </div>
+        </li>
+        <li>
+          <span>4</span>
+          <div>
+            <h3 data-i18n="stepFourTitle">Use on-device AI for context</h3>
+            <p data-i18n="stepFourBody">Gemini Nano assists when the page is suspicious but still requires language, layout, or intent judgment.</p>
+          </div>
+        </li>
+        <li>
+          <span>5</span>
+          <div>
+            <h3 data-i18n="stepFiveTitle">Warn, explain, or allow reset</h3>
+            <p data-i18n="stepFiveBody">Users see a warning or detailed verdict and retain control over allow and reset decisions.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="signals" class="content-section">
+      <div class="section-heading">
+        <p class="eyebrow" data-i18n="signalsEyebrow">Detection examples</p>
+        <h2 data-i18n="signalsTitle">Evidence the extension can reason about</h2>
+        <p data-i18n="signalsBody">
+          Public examples are intentionally sanitized. The project does not publish live phishing URLs, credentials, internal hostnames, or sensitive incident details.
+        </p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="tablePattern">Pattern</th>
+              <th data-i18n="tableWhy">Why it matters</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-i18n="patternOne">Brand-like login page on a non-official domain</td>
+              <td data-i18n="whyOne">May indicate credential harvesting or targeted impersonation.</td>
+            </tr>
+            <tr>
+              <td data-i18n="patternTwo">Password form plus phishing-kit marker</td>
+              <td data-i18n="whyTwo">Combines credential collection with direct implementation evidence.</td>
+            </tr>
+            <tr>
+              <td data-i18n="patternThree">Hidden or prefilled corporate email hint</td>
+              <td data-i18n="whyThree">Can indicate spear-phishing or account-specific lures.</td>
+            </tr>
+            <tr>
+              <td data-i18n="patternFour">Dynamic logo or background from a victim domain</td>
+              <td data-i18n="whyFour">Common behavior in reusable phishing kits that adapt branding.</td>
+            </tr>
+            <tr>
+              <td data-i18n="patternFive">Fake download or clipboard shell payload</td>
+              <td data-i18n="whyFive">Can lead to malware delivery or ClickFix-style command abuse.</td>
+            </tr>
+            <tr>
+              <td data-i18n="patternSix">Webhook endpoint combined with a credential form</td>
+              <td data-i18n="whySix">Suggests a possible exfiltration path while avoiding collection of secret values.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="content-section alt">
+      <div class="section-heading">
+        <p class="eyebrow" data-i18n="principlesEyebrow">Design principles</p>
+        <h2 data-i18n="principlesTitle">Privacy-first, evidence-aware protection</h2>
+      </div>
+      <div class="principle-grid">
+        <article>
+          <h3 data-i18n="principleOneTitle">No external LLM API for page content</h3>
+          <p data-i18n="principleOneBody">The extension is designed so browsing context is analyzed on the device.</p>
+        </article>
+        <article>
+          <h3 data-i18n="principleTwoTitle">Rules are not replaced by AI</h3>
+          <p data-i18n="principleTwoBody">Deterministic evidence remains explicit and explainable.</p>
+        </article>
+        <article>
+          <h3 data-i18n="principleThreeTitle">AI handles ambiguous context</h3>
+          <p data-i18n="principleThreeBody">Language, layout, and intent judgment are useful when hard evidence is not enough.</p>
+        </article>
+        <article>
+          <h3 data-i18n="principleFourTitle">Users keep control</h3>
+          <p data-i18n="principleFourBody">Allowlist and page reset flows remain visible user decisions.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="roadmap" class="split-section final-section">
+      <div>
+        <p class="eyebrow" data-i18n="roadmapEyebrow">Status and roadmap</p>
+        <h2 data-i18n="roadmapTitle">Experimental proof of concept</h2>
+      </div>
+      <div class="split-copy">
+        <p data-i18n="roadmapBody">
+          ScamGuard AI is intended for security research, pilot testing, and defensive evaluation. It is not yet an enterprise-managed security product.
+        </p>
+        <ul class="roadmap-list">
+          <li data-i18n="roadmapItem1">Add hard-evidence precheck before LLM analysis.</li>
+          <li data-i18n="roadmapItem2">Expand phishing-kit markers for webhook and messaging-platform exfiltration patterns.</li>
+          <li data-i18n="roadmapItem3">Design privacy-first endpoint-only network observation.</li>
+          <li data-i18n="roadmapItem4">Review web-accessible resources and conservative safe-domain behavior.</li>
+        </ul>
+        <a class="text-link" href="https://github.com/windshock/scamguard-ai/issues/2" data-i18n="roadmapLink">Track technical improvement issue #2</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>ScamGuard AI</span>
+    <span data-i18n="footerText">Defensive research project for browser-side phishing triage.</span>
+  </footer>
+</body>
+</html>

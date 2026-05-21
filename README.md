@@ -8,6 +8,15 @@ ScamGuard AI is a highly private, **100% on-device** phishing and scam detection
 
 ---
 
+## 🌐 Public Introduction
+
+Read the bilingual public introduction page:
+
+- GitHub Pages: https://windshock.github.io/scamguard-ai/
+- Source: [docs/index.html](docs/index.html)
+
+---
+
 ## ✨ Features
 
 - **Zero-Data Privacy**: All URL and link scanning happens locally on your device. Your browsing data is NEVER sent to an external server.
