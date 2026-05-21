@@ -14,6 +14,13 @@
     "notes": "localhost라도 위험 URI/ClickFix 쉘 페이로드가 있으면 internal auto-safe를 우회"
   },
   {
+    "name": "localhost-hard-evidence-fixture",
+    "url": "http://127.0.0.1:8765/hard_evidence_fixture.html",
+    "expectedPhishing": true,
+    "minScore": 9,
+    "notes": "Telegram/Discord exfil marker + credential form이면 LLM 없이 hardEvidencePrecheck에서 차단"
+  },
+  {
     "name": "google-safe",
     "url": "https://www.google.com",
     "expectedPhishing": false,

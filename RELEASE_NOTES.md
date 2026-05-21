@@ -1,3 +1,31 @@
+# ScamGuard AI v0.1.29 Release Notes
+
+## Hard-evidence precheck before Gemini Nano
+
+This release moves direct behavioral evidence ahead of the LLM path. After page extraction, `hardEvidencePrecheck()` can now return a deterministic phishing verdict without creating a Gemini Nano session when the page contains strong evidence:
+
+- shell execution payloads written to the clipboard
+- auto-download attempts observed during hidden-tab scanning
+- high-risk URI schemes such as `ms-msdt:`, `applescript:`, `shell:`, or `vbscript:`
+- phishing-kit markers combined with credential-like forms
+
+### Expanded kit markers
+
+`content_extract.js` now records Telegram, Discord, and webhook.site exfiltration markers in `behaviors.phishingKitMarkers`. These markers are only elevated as hard evidence when combined with credential-like form evidence.
+
+### Safer trust and exposure defaults
+
+- `safeDomains` session trust has been replaced by exact-host `safeHosts` entries with a six-hour TTL and a shared-hosting guard.
+- `web_accessible_resources` is reduced to the tab-facing warning/verdict UI files only; OCR assets, offscreen documents, and injected scripts are no longer exposed to arbitrary web origins.
+- The prompt now includes `phishingKitMarkers` in the BEHAVIORS section when the LLM path is still needed.
+- `docs/network-observation.md` defines the privacy boundary for any future endpoint-only network hook.
+
+### Regression fixture
+
+Added `eval/hard_evidence_fixture.html` and included it in both fixture manifests to cover the hard-evidence path without relying on external phishing URLs.
+
+---
+
 # ScamGuard AI v0.1.28 Release Notes
 
 ## 🌐 Full i18n — override / scan-shortcut reasons now translated too

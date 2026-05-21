@@ -128,6 +128,38 @@ function parseWhois(html) {
 function parseStaticHtml(html, base) {
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
+
+    const phishingKitMarkersSet = new Set();
+    const PHISHING_KIT_LITERALS = [
+      { re: /logo\.clearbit\.com\//i, tag: "clearbit-logo" },
+      { re: /api\.screenshotmachine\.com/i, tag: "screenshotmachine" },
+      { re: /api\.telegram\.org\/bot[^/]+\/sendMessage/i, tag: "telegram-exfil" },
+      { re: /api\.telegram\.org\/bot[^/]+\/sendDocument/i, tag: "telegram-document-exfil" },
+      { re: /discord(?:app)?\.com\/api\/webhooks/i, tag: "discord-webhook" },
+      { re: /webhook\.site\//i, tag: "webhook-site" }
+    ];
+    const ATOB_LITERAL_RE = /atob\(\s*['"`]([A-Za-z0-9+/=]{8,200})['"`]\s*\)/g;
+    const ATOB_DECODED_URL_RE = /^(?:\.\.?\/|https?:\/\/)|\.(?:php|aspx|asp|jsp|do|action|cgi)(?:$|\?)/i;
+    function collectPhishingKitMarkers(src) {
+      if (!src) return;
+      for (const { re, tag } of PHISHING_KIT_LITERALS) {
+        if (re.test(src)) phishingKitMarkersSet.add(tag);
+      }
+      ATOB_LITERAL_RE.lastIndex = 0;
+      let m;
+      while ((m = ATOB_LITERAL_RE.exec(src)) && phishingKitMarkersSet.size < 16) {
+        try {
+          const decoded = atob(m[1]);
+          if (ATOB_DECODED_URL_RE.test(decoded)) {
+            phishingKitMarkersSet.add("atob-url:" + decoded.slice(0, 80));
+          }
+        } catch {}
+      }
+    }
+    for (const s of doc.querySelectorAll("script")) {
+      collectPhishingKitMarkers(s.textContent || "");
+      collectPhishingKitMarkers(s.getAttribute("src") || "");
+    }
     
     // drop tags
     ["script", "style", "noscript", "svg", "iframe", "link", "meta"].forEach(t => {
@@ -136,7 +168,7 @@ function parseStaticHtml(html, base) {
 
     const serializeFormElement = (el) => {
       const tag = el.tagName.toLowerCase();
-      const attrs = ["name", "type", "placeholder", "value", "action", "method", "id"];
+      const attrs = ["name", "type", "placeholder", "value", "action", "method", "id", "autocomplete"];
       const pairs = attrs.map(k => [k, el.getAttribute(k)]).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}="${String(v).slice(0, 60)}"`);
       return `<${tag} ${pairs.join(" ")}>`;
     };
@@ -200,7 +232,8 @@ function parseStaticHtml(html, base) {
         socialHits,
         shellHits,
         copyButtons: [],
-        codeSnippets: []
+        codeSnippets: [],
+        phishingKitMarkers: [...phishingKitMarkersSet].slice(0, 8)
       }
     };
   } catch (e) {

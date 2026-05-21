@@ -102,9 +102,10 @@
 
       // service-worker verdict / override reasons
       "bg.scan.allowlistShortCircuit": "User has allowed this host ({0}).",
-      "bg.scan.sessionTrusted":       "Session-trusted domain — already judged safe in this session ({0}).",
+      "bg.scan.sessionTrusted":       "Session-trusted host — already judged safe in this session ({0}).",
       "bg.scan.denylistShortCircuit": "Previously confirmed phishing host (persistent record) — re-scan with LLM skipped.",
       "bg.scan.internalSkip":         "Trusted internal domain — no risky behaviour, model call skipped.",
+      "bg.precheck.prefix":           "[Hard evidence precheck: {0}] {1}. LLM skipped.",
 
       "bg.override.prefix":           "[Auto override: {0}] {1}. ",
 
@@ -221,9 +222,10 @@
 
       // service-worker verdict / override reasons
       "bg.scan.allowlistShortCircuit": "사용자가 이 호스트({0})를 허용함",
-      "bg.scan.sessionTrusted":       "세션 신뢰 도메인 — 이 세션의 이전 검사에서 안전 판정 ({0})",
+      "bg.scan.sessionTrusted":       "세션 신뢰 호스트 — 이 세션의 이전 검사에서 안전 판정 ({0})",
       "bg.scan.denylistShortCircuit": "이전 검사에서 피싱으로 판정된 호스트 (영구 기록) — LLM 재검사 생략",
       "bg.scan.internalSkip":         "사내 신뢰 도메인 — 위험 행위 없음, 모델 호출 생략",
+      "bg.precheck.prefix":           "[명확한 증거 사전 검사: {0}] {1}. LLM 생략.",
 
       "bg.override.prefix":           "[자동 오버라이드: {0}] {1}. ",
 

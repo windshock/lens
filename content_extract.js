@@ -17,7 +17,7 @@
   }
   function serializeFormElement(el) {
     const tag = el.tagName.toLowerCase();
-    const attrs = ["name", "type", "placeholder", "value", "action", "method", "id"];
+    const attrs = ["name", "type", "placeholder", "value", "action", "method", "id", "autocomplete"];
     const pairs = attrs
       .map(k => [k, el.getAttribute(k)])
       .filter(([, v]) => v != null && v !== "")
@@ -73,9 +73,14 @@
   // - clearbit-logo: logo.clearbit.com/${domain} — 피해자 이메일 도메인 기반 로고 동적 페치
   // - screenshotmachine: 피해자 회사 페이지 스크린샷을 배경으로 깖
   // - atob-url: atob() 결과가 ../*.php/.aspx 또는 http URL — 자격증명 exfil 엔드포인트 base64 난독화
+  // - telegram/discord/webhook: 자격증명 폼과 결합될 때 강한 exfil 시그널
   const PHISHING_KIT_LITERALS = [
     { re: /logo\.clearbit\.com\//i, tag: "clearbit-logo" },
-    { re: /api\.screenshotmachine\.com/i, tag: "screenshotmachine" }
+    { re: /api\.screenshotmachine\.com/i, tag: "screenshotmachine" },
+    { re: /api\.telegram\.org\/bot[^/]+\/sendMessage/i, tag: "telegram-exfil" },
+    { re: /api\.telegram\.org\/bot[^/]+\/sendDocument/i, tag: "telegram-document-exfil" },
+    { re: /discord(?:app)?\.com\/api\/webhooks/i, tag: "discord-webhook" },
+    { re: /webhook\.site\//i, tag: "webhook-site" }
   ];
   const ATOB_LITERAL_RE = /atob\(\s*['"`]([A-Za-z0-9+/=]{8,200})['"`]\s*\)/g;
   const ATOB_DECODED_URL_RE = /^(?:\.\.?\/|https?:\/\/)|\.(?:php|aspx|asp|jsp|do|action|cgi)(?:$|\?)/i;

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>피싱 검사기 — 명확한 증거 fixture</title>
+  <script>
+    const TELEGRAM_ENDPOINT = "https://api.telegram.org/bot000000000:TEST/sendMessage";
+    const DISCORD_ENDPOINT = "https://discord.com/api/webhooks/000000000/test";
+    window.__sgFixture = { TELEGRAM_ENDPOINT, DISCORD_ENDPOINT };
+  </script>
+</head>
+<body>
+  <h1>명확한 증거 사전 검사 fixture</h1>
+  <p>이 페이지는 외부 LLM 없이 hardEvidencePrecheck에서 차단되어야 합니다.</p>
+  <form action="https://example.test/login" method="post">
+    <label>Email <input type="email" name="email" value="victim@example.test"></label>
+    <label>Password <input type="password" name="password"></label>
+    <button type="submit">Sign in</button>
+  </form>
+</body>
+</html>

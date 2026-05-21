@@ -26,7 +26,7 @@ Critical signals (treat as strong evidence of phishing):
 - BEHAVIORS.dangerousUris non-empty — links with applescript://, ms-msdt://, shell:, vbscript: schemes are direct code-execution vectors.
 - BEHAVIORS.shellHits combined with BEHAVIORS.socialHits can be a ClickFix pattern ONLY when the page is instructing users to paste/run commands (e.g., "Win+R", "Run", "paste into Terminal/PowerShell") and/or when clipboardWrites contains a shell payload. Mere presence of shell commands in developer documentation is NOT phishing by itself.
 - Brand impersonation on hosting subdomains: if the page mimics brand X but is on workers.dev/pages.dev/vercel.app/netlify.app/etc. — assume phishing unless explicit demo disclaimer.
-- BEHAVIORS.phishingKitMarkers non-empty — concrete phishing-kit fingerprints found in inline scripts: \`clearbit-logo\` (logo.clearbit.com fetched dynamically by victim email domain), \`screenshotmachine\` (victim company homepage used as blurred background), or \`atob-url:\` (base64-decoded credential-exfil endpoint). Each is a strong phishing indicator on its own; combined with a password input the page is almost certainly a credential-harvesting kit, regardless of how legitimate the visible host or branding looks.
+- BEHAVIORS.phishingKitMarkers non-empty — concrete phishing-kit fingerprints found in inline scripts: \`clearbit-logo\` (logo.clearbit.com fetched dynamically by victim email domain), \`screenshotmachine\` (victim company homepage used as blurred background), \`atob-url:\` (base64-decoded credential-exfil endpoint), or messaging/webhook exfil markers such as Telegram, Discord, or webhook.site endpoints. Treat these as strong evidence when combined with a credential form, hidden/prefilled account, brand impersonation, or off-origin collection path.
 
 Limitations:
 - Subdomains of hosting services (Cloudflare, AWS, Azure, Netlify, pages.dev, weebly.com) should NOT be assumed legitimate even if their WHOIS is legitimate.
@@ -226,6 +226,7 @@ const FALLBACK_NOTIF_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAA
 const TAB_LOAD_TIMEOUT_MS = 8000;
 const NAVIGATION_SCAN_COOLDOWN_MS = 60_000;
 const PROMPT_OUTPUT_RESERVE = 512;
+const SESSION_TRUST_TTL_MS = 6 * 60 * 60 * 1000;
 
 let _session = null;
 let _availability = null;
@@ -623,6 +624,9 @@ function formatBehaviors(b) {
       lines.push("  - " + clamp(String(s).replace(/\s+/g, " ").trim(), 420));
     }
   }
+  if (b.phishingKitMarkers?.length) {
+    lines.push("phishingKitMarkers: " + b.phishingKitMarkers.slice(0, 8).join(", "));
+  }
   return lines.join("\n");
 }
 
@@ -846,6 +850,57 @@ async function cacheSet(key, val) {
   await chrome.storage.session.set({ [key]: val });
 }
 
+function hostFromUrl(url) {
+  try { return new URL(url).hostname.toLowerCase(); }
+  catch { return ""; }
+}
+
+function isSharedHostingHost(host) {
+  return !!host && FREE_HOSTING_RE.test(host);
+}
+
+async function getSessionTrustedHost(url) {
+  const host = hostFromUrl(url);
+  if (!host || isSharedHostingHost(host)) return null;
+  const now = Date.now();
+  const { safeHosts = [] } = await chrome.storage.session.get("safeHosts");
+  const live = safeHosts
+    .filter(e => e && e.host && e.expiresAt > now && !isSharedHostingHost(e.host))
+    .slice(-200);
+  if (live.length !== safeHosts.length) {
+    await chrome.storage.session.set({ safeHosts: live });
+  }
+  return live.find(e => e.host === host) || null;
+}
+
+async function rememberSessionTrustedHost(url, sourceRule) {
+  const host = hostFromUrl(url);
+  if (!host || isPrivateIp(host) || isSharedHostingHost(host)) return;
+  const now = Date.now();
+  const { safeHosts = [] } = await chrome.storage.session.get("safeHosts");
+  const live = safeHosts
+    .filter(e => e && e.host && e.expiresAt > now && e.host !== host && !isSharedHostingHost(e.host))
+    .slice(-199);
+  live.push({ host, source: sourceRule, expiresAt: now + SESSION_TRUST_TTL_MS });
+  await chrome.storage.session.set({ safeHosts: live });
+  console.log("safeHosts added:", host, "source:", sourceRule, "(total", live.length, ")");
+}
+
+async function finalizeVerdict(verdict, extracted, url, key, source, meta) {
+  if (verdict.phishing === true && (verdict.phishing_score ?? 0) >= 7) {
+    try {
+      const finalHost = new URL(extracted?.finalUrl || url).hostname.toLowerCase();
+      if (finalHost) await addToDenylist(finalHost);
+    } catch {}
+  }
+  verdict.url = url;
+  verdict.ts = Date.now();
+  await cacheSet(key, verdict);
+  await chrome.storage.session.set({ lastVerdict: verdict });
+  await dispatchResult(source, url, verdict, meta);
+  return verdict;
+}
+
 // ───────────────────────── 핵심: scanUrl ─────────────────────────
 
 async function scanUrl(url, source, meta = {}) {
@@ -874,24 +929,22 @@ async function scanUrl(url, source, meta = {}) {
       await dispatchResult(source, url, cached, { ...meta, cached: true });
       return cached;
     }
-    // 세션 단위 자동 신뢰 도메인(safeDomains) — 이전 검사에서 O1-safe/O5/O6 단독 발동했고
-    // 위험 오버라이드가 없었던 도메인. 같은 도메인의 다른 URL도 추출/LLM 생략하고 안전 처리.
+    // 세션 단위 자동 신뢰 호스트(safeHosts) — 이전 검사에서 O1-safe/O5/O6 단독 발동했고
+    // 위험 오버라이드가 없었던 exact host만 짧게 신뢰한다. shared-hosting 전체 등록 도메인
+    // 단위로는 절대 skip하지 않는다.
     try {
-      const reg = registeredDomain(url);
-      if (reg) {
-        const { safeDomains = [] } = await chrome.storage.session.get("safeDomains");
-        if (safeDomains.includes(reg)) {
-          const safeBySession = {
-            phishing_score: 0, brand: null, phishing: false,
-            suspicious_domain: false,
-            reason: t("bg.scan.sessionTrusted", reg),
-            url, ts: Date.now()
-          };
-          await cacheSet(key, safeBySession);
-          await chrome.storage.session.set({ lastVerdict: safeBySession });
-          await dispatchResult(source, url, safeBySession, { ...meta, sessionTrustedDomain: true });
-          return safeBySession;
-        }
+      const trustedHost = await getSessionTrustedHost(url);
+      if (trustedHost) {
+        const safeBySession = {
+          phishing_score: 0, brand: null, phishing: false,
+          suspicious_domain: false,
+          reason: t("bg.scan.sessionTrusted", trustedHost.host),
+          url, ts: Date.now()
+        };
+        await cacheSet(key, safeBySession);
+        await chrome.storage.session.set({ lastVerdict: safeBySession });
+        await dispatchResult(source, url, safeBySession, { ...meta, sessionTrustedHost: true });
+        return safeBySession;
       }
     } catch {}
     // 영구 denylist hit — LLM/추출/OCR 전부 생략하고 phishing 으로 short-circuit.
@@ -925,6 +978,17 @@ async function scanUrl(url, source, meta = {}) {
       await chrome.storage.session.set({ lastVerdict: safe });
       await dispatchResult(source, url, safe, { ...meta, skipped: true });
       return safe;
+    }
+    const hardVerdict = hardEvidencePrecheck(extracted, extracted.finalUrl || url);
+    if (hardVerdict) {
+      return await finalizeVerdict(
+        hardVerdict,
+        extracted,
+        url,
+        key,
+        source,
+        { ...meta, hardEvidencePrecheck: true }
+      );
     }
     const regDomain = registeredDomain(extracted.finalUrl || url);
     let finalHostForCt = "";
@@ -979,20 +1043,7 @@ async function scanUrl(url, source, meta = {}) {
   verdict.brand = normalizeBrand(verdict.brand);
   // ── 결정론적 후처리 오버라이드 ──
   await applyOverrides(verdict, extracted, url, whois);
-  // 강한 phishing 으로 확정된 호스트는 영구 denylist 에 기록.
-  // O5/O6 가 우회한 케이스는 verdict.phishing 이 false 가 되므로 자연스럽게 제외.
-  if (verdict.phishing === true && (verdict.phishing_score ?? 0) >= 7) {
-    try {
-      const finalHost = new URL(extracted?.finalUrl || url).hostname.toLowerCase();
-      if (finalHost) await addToDenylist(finalHost);
-    } catch {}
-  }
-  verdict.url = url;
-  verdict.ts = Date.now();
-  await cacheSet(key, verdict);
-  await chrome.storage.session.set({ lastVerdict: verdict });
-  await dispatchResult(source, url, verdict, meta);
-  return verdict;
+  return await finalizeVerdict(verdict, extracted, url, key, source, meta);
 }
 
 // ───────────────────────── 결과 처리(source별 분기) ─────────────────────────
@@ -1029,6 +1080,7 @@ async function notify(severity, title, body, verdictId) {
 const SHELL_PAYLOAD_RE = /(?:\bcurl\b[\s\S]{0,12000}\|\s*(?:bash|sh|zsh|fish)\b|\bwget\b[\s\S]{0,12000}\|\s*(?:bash|sh|zsh|fish)\b|\bpowershell(?:\s|\.exe)|\biex\s*\(|\bInvoke-(?:Expression|WebRequest)\b|\bmshta\b|\bcmd\.exe\b|\beval\s*\(|\btr\s+['"][\w./:]+['"]\s+['"][\w./:]+['"]|\bbase64\s+-d\b|\bcertutil\s+-(?:urlcache|decode)\b|\bchmod\s+\+x\b)/i;
 // 위험 커스텀 URI 스킴
 const DANGEROUS_URI_RE = /^(applescript|ms-msdt|ms-msvr|ms-search|search-ms|shell|vbscript|jar|chrome|about):/i;
+const HARD_DANGEROUS_URI_RE = /^(applescript|ms-msdt|ms-msvr|ms-search|search-ms|shell|vbscript):/i;
 // 다운로드 강제 확장자
 const EXEC_EXT_RE = /\.(exe|dmg|pkg|msi|bat|cmd|ps1|vbs|jar|scr|hta|app|command|scpt|sh|run|deb|rpm|appimage)(\?|$)/i;
 
@@ -1067,6 +1119,76 @@ function hasCredentialLikeForms(extracted) {
   );
 }
 
+function hasPhishingKitCredentialEvidence(extracted) {
+  const kitMarkers = extracted?.behaviors?.phishingKitMarkers || [];
+  return kitMarkers.length > 0 && hasCredentialLikeForms(extracted);
+}
+
+function collectHardEvidenceSignals(extracted) {
+  const b = extracted?.behaviors || {};
+  const signals = [];
+
+  const clips = b.clipboardWrites || [];
+  for (const c of clips) {
+    const text = (typeof c === "string") ? c : (c?.text || "");
+    if (SHELL_PAYLOAD_RE.test(text)) {
+      signals.push({
+        rule: "H1",
+        score: 10,
+        reason: t("bg.override.O2.clipboardShell", clamp(text.replace(/\s+/g, " "), 120))
+      });
+      break;
+    }
+  }
+
+  const autoDl = b.autoDownloads || [];
+  if (autoDl.length > 0) {
+    const f = autoDl[0]?.filename || autoDl[0]?.url || "(unknown)";
+    signals.push({
+      rule: "H2",
+      score: 9,
+      reason: t("bg.override.O3.autoDownload", autoDl.length, clamp(f, 120))
+    });
+  }
+
+  const dangerUris = (b.dangerousUris || []).filter(u => HARD_DANGEROUS_URI_RE.test(String(u).trim()));
+  if (dangerUris.length > 0) {
+    signals.push({
+      rule: "H3",
+      score: 9,
+      reason: t("bg.override.O4.dangerousUri", dangerUris.slice(0, 3).join(", "))
+    });
+  }
+
+  const kitMarkers = b.phishingKitMarkers || [];
+  if (kitMarkers.length > 0 && hasCredentialLikeForms(extracted)) {
+    signals.push({
+      rule: "H4",
+      score: 9,
+      reason: t("bg.override.O7.kitMarker", kitMarkers.slice(0, 3).join(", "))
+    });
+  }
+
+  return signals;
+}
+
+function hardEvidencePrecheck(extracted, url) {
+  const signals = collectHardEvidenceSignals(extracted);
+  if (signals.length === 0) return null;
+  const rules = signals.map(s => s.rule).join("+");
+  const reasons = signals.map(s => s.reason).join(" · ");
+  return {
+    phishing_score: Math.max(...signals.map(s => s.score)),
+    brand: null,
+    phishing: true,
+    suspicious_domain: true,
+    reason: t("bg.precheck.prefix", rules, reasons),
+    hard_evidence: signals.map(s => s.rule),
+    llm_skipped: true,
+    final_url: extracted?.finalUrl || url
+  };
+}
+
 function hasShellClipboardPayload(extracted) {
   const clips = extracted?.behaviors?.clipboardWrites || [];
   for (const c of clips) {
@@ -1082,6 +1204,7 @@ function hasInternalBypassRisk(extracted) {
     hasShellClipboardPayload(extracted) ||
     (b.autoDownloads?.length > 0) ||
     (b.dangerousUris?.length > 0) ||
+    hasPhishingKitCredentialEvidence(extracted) ||
     (hasShellPayloadInPageText(extracted) && hasClickFixLikeInstruction(extracted))
   );
 }
@@ -1422,25 +1545,16 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
     console.log("applyOverrides:", overrides);
   }
 
-  // 세션 자동 신뢰 도메인 마킹 — 도메인 화이트리스트 기반 안전 판정(O1-safe/O5/O6)만 발동했고
+  // 세션 자동 신뢰 호스트 마킹 — 도메인 화이트리스트 기반 안전 판정(O1-safe/O5/O6)만 발동했고
   // 위험 시그널이 전혀 없을 때만. 콘텐츠 시그널(예: 클립보드 셸 페이로드)이 잡혔다면 트러스트 안 함.
-  // 이후 같은 도메인의 다른 URL은 scanUrl 상단에서 LLM 호출 없이 short-circuit.
+  // 이후 같은 exact host의 다른 URL은 scanUrl 상단에서 LLM 호출 없이 short-circuit.
   const DOMAIN_TRUST_RULES = new Set(["O1-safe", "O5", "O6"]);
-  const hasDomainTrustRule = overrides.some(o => DOMAIN_TRUST_RULES.has(o.rule));
+  const domainTrustRule = overrides.find(o => DOMAIN_TRUST_RULES.has(o.rule));
+  const hasDomainTrustRule = !!domainTrustRule;
   const hasAnyDanger = overrides.some(o => o.sev === "danger");
   if (hasDomainTrustRule && !hasAnyDanger) {
     try {
-      const reg = registeredDomain(extracted?.finalUrl || url);
-      if (reg) {
-        const { safeDomains = [] } = await chrome.storage.session.get("safeDomains");
-        if (!safeDomains.includes(reg)) {
-          safeDomains.push(reg);
-          // 너무 비대해지지 않게 200개 한도(LRU 비슷, 오래된 게 앞).
-          while (safeDomains.length > 200) safeDomains.shift();
-          await chrome.storage.session.set({ safeDomains });
-          console.log("safeDomains added:", reg, "(total", safeDomains.length, ")");
-        }
-      }
+      await rememberSessionTrustedHost(extracted?.finalUrl || url, domainTrustRule.rule);
     } catch {}
   }
 }
@@ -1682,8 +1796,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         // 2) RDAP / CT 캐시 (host 키) 제거
         if (host) sessionKeysToRemove.push("rdap:" + host, "cert:" + host);
-        // 3) host 가 safeDomains 에 있을 경우(현 PR 범위 외지만 동기화 위해) 그건 그대로 둠 — 다음 검사가 다시 채움.
         if (sessionKeysToRemove.length) await chrome.storage.session.remove([...new Set(sessionKeysToRemove)]);
+        // 3) exact-host 세션 신뢰도 제거 — 다음 검사는 다시 추출부터 시작.
+        if (host) {
+          const { safeHosts = [] } = await chrome.storage.session.get("safeHosts");
+          const nextSafeHosts = safeHosts.filter(e => e?.host !== host);
+          if (nextSafeHosts.length !== safeHosts.length) {
+            await chrome.storage.session.set({ safeHosts: nextSafeHosts });
+          }
+        }
 
         // 4) 영구 denylist 에서 host hash 제거
         let denyRemoved = 0;
@@ -1717,7 +1838,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const allowlistEntries = (before.allowlistHosts || []).length;
 
         // 1) session storage 전체 비움 — verdict cache (v:), warning vid (verdict:),
-        //    lastVerdict, RDAP/CT 캐시 (rdap:/cert:), safeDomains, allowlist (legacy) 등.
+        //    lastVerdict, RDAP/CT 캐시 (rdap:/cert:), safeHosts, allowlist (legacy) 등.
         await chrome.storage.session.clear();
 
         // 2) local storage 의 denylist + 호스트 allowlist 만 비움. notifIcons 는 보존
