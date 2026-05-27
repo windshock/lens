@@ -964,21 +964,28 @@ async function scanUrl(url, source, meta = {}) {
       }
     } catch {}
   }
+
+  // 내부 도메인(사내 INTERNAL_DOMAINS 또는 RFC1918/loopback/link-local/IPv6 ULA 등 사설 IP)
+  // 은 hidden tab / extract / OCR / WHOIS / LLM 전부 skip 하고 즉시 safe 반환.
+  // 사내 신뢰 영역으로 간주하여 사용자에게 보이는 "검사" 행위(탭 깜빡임 포함) 자체를 생략한다.
+  // 과거에는 extract 후 hasInternalBypassRisk 로 판단했지만 hidden 탭이 사용자에게 노출되고
+  // 사설 IP 도 의도와 달리 검사가 진행되는 문제가 있어 v0.1.29 부터 즉시 short-circuit.
+  if (internalDomain) {
+    const safe = {
+      phishing_score: 0, brand: null, phishing: false,
+      suspicious_domain: false, reason: t("bg.scan.internalSkip"),
+      url, ts: Date.now()
+    };
+    if (!bypassLookup) await cacheSet(key, safe);
+    await chrome.storage.session.set({ lastVerdict: safe });
+    await dispatchResult(source, url, safe, { ...meta, skipped: true });
+    return safe;
+  }
+
   let extracted, ocr = "", whois = "WHOIS lookup skipped";
   try {
     extracted = await extractFromUrl(url, source, meta);
     if (!extracted) extracted = { finalUrl: url, forms: [], anchors: [], imgs: [], visibleText: "" };
-    if (internalDomain && !hasInternalBypassRisk(extracted)) {
-      const safe = {
-        phishing_score: 0, brand: null, phishing: false,
-        suspicious_domain: false, reason: t("bg.scan.internalSkip"),
-        url, ts: Date.now()
-      };
-      if (!bypassLookup) await cacheSet(key, safe);
-      await chrome.storage.session.set({ lastVerdict: safe });
-      await dispatchResult(source, url, safe, { ...meta, skipped: true });
-      return safe;
-    }
     const hardVerdict = hardEvidencePrecheck(extracted, extracted.finalUrl || url);
     if (hardVerdict) {
       return await finalizeVerdict(

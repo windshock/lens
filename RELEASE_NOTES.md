@@ -1,3 +1,24 @@
+# ScamGuard AI v0.1.30 Release Notes
+
+## 🔕 Internal domains and private IPs now fully skip the scan
+
+Two user reports surfaced the same root cause:
+
+1. Private-IP hosts (e.g. `http://172.29.247.33:8080/`) and intranet hostnames whose registered domain is in `INTERNAL_DOMAINS` (e.g. `wiki.skplanet.com`) were still going through `extractFromUrl`, which opens a `chrome.tabs.create({ active: false })` hidden tab. The tab is *not active*, but it flashes in the tab bar for the duration of the extraction — users perceive that as "the extension is scanning my intranet page."
+2. The `isInternalDomain` short-circuit lived *after* the extraction, so the safe verdict was only emitted once DOM extraction (and possibly OCR / WHOIS) had already started.
+
+### Fix
+The `internalDomain` short-circuit is now evaluated **immediately after the allowlist / cache / safeDomains / denylist checks, before any extraction is attempted**. When `isInternalDomain(url)` returns true (RFC1918 / 127/8 / 169.254/16 / IPv6 ULA / link-local / loopback / hostname in `INTERNAL_DOMAINS`):
+
+- No hidden tab is created — the tab bar no longer flashes.
+- No OCR, no WHOIS, no RDAP, no CT lookup, no Gemini Nano call.
+- An immediate "trusted internal domain — model call skipped" verdict is cached and dispatched.
+
+### Trade-off
+The previous `hasInternalBypassRisk` check (clipboard shell payload / auto-download / dangerous URI on an internal page) is no longer executed for internal hosts. The function definition is kept in source for future re-enablement, but on the current default policy internal hosts are simply trusted. If an intranet page itself ever becomes a credential-harvesting risk that decision will need to be revisited.
+
+---
+
 # ScamGuard AI v0.1.29 Release Notes
 
 ## Hard-evidence precheck before Gemini Nano
