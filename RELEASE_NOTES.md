@@ -1,3 +1,54 @@
+# ScamGuard AI v0.1.31 Release Notes
+
+## ⏱ Popup no longer hangs for 30–50 seconds on the same URL
+
+A user reported clicking the toolbar popup's "Scan this page" on `fmkorea.com` and seeing the "Scanning…" ticker spin for 50+ seconds before any verdict appeared. The popup stayed open the whole time — it wasn't blur-closing — so a 30-second sendMessage timeout alone wouldn't have helped.
+
+### Root cause
+Up to three independent triggers fire for the same URL on a typical content page:
+
+1. `chrome.tabs.onUpdated` (status=complete) — the navigation scan.
+2. `click_guard.js`'s `schedulePrefetch()` — when the page has `pagePotentiallyNeedsScan()` indicators (Copy buttons, download links, etc.).
+3. The user clicking "Scan this page" in the popup.
+
+Each one calls `scanUrl(url, ...)`. None of them shared work with the others, and all three missed the session cache because none had written the verdict yet. The single Gemini Nano session serializes `prompt()` calls, so three parallel scans queued behind a single LM session became three sequential ~10–15s LM runs — totalling 30–50+ seconds before the popup's `await sendMessage` resolved.
+
+### Fix
+A module-scope `Map` (`inflightScans`) now dedupes by cache key. The first caller starts the scan; subsequent callers for the same URL await the same promise and get the same verdict. The entry is removed in `.finally()`. Each source's `dispatchResult` branch still runs (per the first call's `source`), and the popup awaits the shared promise, so a popup click that races a background prefetch now returns in roughly one LM call's worth of time instead of three.
+
+The `bypassCache` path (used by `eval/eval_harness.py`) opts out of dedup so evaluation cycles still measure full scans.
+
+## 🛡 O1-whois override no longer triggers on hallucinated short brand tokens
+
+In the same incident the user pasted a verdict reason that read `WHOIS/RDAP/CT matched brand 'Aagag' — official domain assumed`. "Aagag" was an LLM hallucination, but its 5-character token happened to substring-match somewhere in the assembled WHOIS string (likely inside `Name Server:` or `Domain Name:`), and `applyOverrides`'s `O1-whois` rule promoted the verdict to "safe" on the strength of that match.
+
+### Why the original matching was too loose
+The yesnic+RDAP+CT result is joined as a single ` | `-separated string. The previous check did `whois.toLowerCase().includes(token)` against the whole string, so any 4+ char brand token that incidentally appeared inside `Domain Name:`, `Name Server:`, or `Contact:` — fields that trivially echo the domain itself — would satisfy the rule. This made the safe override circular: an LLM-claimed brand was "verified" against the very domain the LLM was inspecting.
+
+### Fix
+Brand-token matching is now restricted to RDAP `Registrant:` and CT log `IssuerOrg:` segments — the two labels that actually represent independent ownership evidence. yesnic's `Domain Name:` / `Name Server:` / `Contact:` no longer count. The override still fires for legitimate cases like `microsoftonline.com` (RDAP via MarkMonitor exposes `Registrant: Microsoft Corporation`) but no longer fires when only yesnic data is present and the brand is short and coincidentally substring-matches.
+
+## 🔕 Popup source no longer emits a duplicate OS notification
+
+When `dispatchResult` was reached with `source === "popup"`, `notify()` would fire a Chrome OS notification in addition to the popup rendering its own verdict UI. Two issues:
+
+- The information was duplicated — the popup already displays the verdict.
+- On macOS, a notification appearing in the corner can briefly steal focus and blur-close the popup, which kills the awaited `sendMessage` and can leave the UI in an inconsistent state.
+
+`dispatchResult` now returns early for `source === "popup"`. Notifications still fire for `contextMenu`, `download`, `owa`, and (for danger only) `navigation`.
+
+## 🩹 Popup safety timeout
+
+As a defensive net independent of the single-flight fix, the popup's `await chrome.runtime.sendMessage(...)` is now wrapped in `Promise.race` against a 60-second timeout. If the SW ever fails to respond — LM session hang, offscreen worker death, unforeseen edge cases — the popup will display the error rather than spinning indefinitely. Error messages are HTML-escaped before rendering.
+
+## 🧹 Minor cleanups
+
+- Removed unused module-scope regex constants (`DANGEROUS_URI_RE`, `EXEC_EXT_RE`) and the now-unreachable `hasInternalBypassRisk()` function. These were leftovers from the v0.1.29 hard-evidence precheck and v0.1.30 internal-domain short-circuit refactors. The same regexes still live and work inside `click_guard.js` for in-page click classification.
+- Added a JSDoc `@returns {Promise<any>}` to `sendToOffscreen()` so TypeScript no longer infers a single response shape across messages that genuinely return different shapes (OCR → string, OCR_DIAGNOSTICS → object, GENERATE_ICONS → icons map).
+- Corrected the diagnostics handler's `ocrInfo` fallback shape (`{available, languages}`) to match what `offscreen.js#checkOcrAvailability()` actually returns.
+
+---
+
 # ScamGuard AI v0.1.30 Release Notes
 
 ## 🔕 Internal domains and private IPs now fully skip the scan

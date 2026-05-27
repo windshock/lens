@@ -345,6 +345,12 @@ async function ensureOffscreen() {
   });
 }
 
+/**
+ * 메시지 type 마다 응답 shape 이 다르므로(예: OCR→string, OCR_DIAGNOSTICS→{available,languages},
+ * WHOIS_PARSE→string, GENERATE_ICONS→icons map) TS 가 단일 shape 으로 추론하지 않도록
+ * @returns 를 any 로 명시한다.
+ * @returns {Promise<any>}
+ */
 async function sendToOffscreen(msg) {
   await ensureOffscreen();
   return await chrome.runtime.sendMessage({ target: "offscreen", ...msg });
@@ -850,6 +856,12 @@ async function cacheSet(key, val) {
   await chrome.storage.session.set({ [key]: val });
 }
 
+// [single-flight] 같은 URL 의 동시 다중 스캔(navigation / popup / click-guard / contextMenu)을
+// 첫 호출의 promise 로 공유한다. 캐시 write 전에 들어오는 후속 호출이 cache miss 되어 단일
+// LM 세션 큐에 직렬로 쌓이면 popup 응답이 30-50초+ 까지 지연되던 문제 해결. 모듈 스코프 Map
+// 이라 SW idle 종료 시 자연히 비워진다. bypassCache(eval harness)는 dedup 제외.
+const inflightScans = new Map();
+
 function hostFromUrl(url) {
   try { return new URL(url).hostname.toLowerCase(); }
   catch { return ""; }
@@ -907,9 +919,27 @@ async function scanUrl(url, source, meta = {}) {
   if (!url || !/^https?:/i.test(url)) {
     return { error: "scannable_url_required" };
   }
-  const internalDomain = isInternalDomain(url);
   const bypassLookup = !!meta?.bypassCache || isLoopbackUrl(url);
   const key = "v:" + (await sha256Hex(url));
+
+  if (!bypassLookup) {
+    const existing = inflightScans.get(key);
+    if (existing) {
+      try { return await existing; } catch {}
+    }
+  }
+  const work = _runScan(url, source, meta, key, bypassLookup);
+  if (!bypassLookup) {
+    inflightScans.set(key, work);
+    work.finally(() => {
+      if (inflightScans.get(key) === work) inflightScans.delete(key);
+    });
+  }
+  return work;
+}
+
+async function _runScan(url, source, meta, key, bypassLookup) {
+  const internalDomain = isInternalDomain(url);
   // 평가 사이클용 bypassCache 플래그 — 캐시·allowlist 우회.
   if (!bypassLookup) {
     let allowlistHost = "";
@@ -1085,11 +1115,8 @@ async function notify(severity, title, body, verdictId) {
 // 셸 명령으로 보이는 페이로드(쉘 직접·난독화·파이프 포함)
 // NOTE: ClickFix는 curl/wget 이후 파이프 체인이 길어질 수 있어 범위를 넉넉히 둔다.
 const SHELL_PAYLOAD_RE = /(?:\bcurl\b[\s\S]{0,12000}\|\s*(?:bash|sh|zsh|fish)\b|\bwget\b[\s\S]{0,12000}\|\s*(?:bash|sh|zsh|fish)\b|\bpowershell(?:\s|\.exe)|\biex\s*\(|\bInvoke-(?:Expression|WebRequest)\b|\bmshta\b|\bcmd\.exe\b|\beval\s*\(|\btr\s+['"][\w./:]+['"]\s+['"][\w./:]+['"]|\bbase64\s+-d\b|\bcertutil\s+-(?:urlcache|decode)\b|\bchmod\s+\+x\b)/i;
-// 위험 커스텀 URI 스킴
-const DANGEROUS_URI_RE = /^(applescript|ms-msdt|ms-msvr|ms-search|search-ms|shell|vbscript|jar|chrome|about):/i;
+// 위험 커스텀 URI 스킴 (hard precheck)
 const HARD_DANGEROUS_URI_RE = /^(applescript|ms-msdt|ms-msvr|ms-search|search-ms|shell|vbscript):/i;
-// 다운로드 강제 확장자
-const EXEC_EXT_RE = /\.(exe|dmg|pkg|msi|bat|cmd|ps1|vbs|jar|scr|hta|app|command|scpt|sh|run|deb|rpm|appimage)(\?|$)/i;
 
 function normalizeBrand(brand) {
   const b = (brand ?? "").toString().trim();
@@ -1203,17 +1230,6 @@ function hasShellClipboardPayload(extracted) {
     if (SHELL_PAYLOAD_RE.test(text)) return true;
   }
   return false;
-}
-
-function hasInternalBypassRisk(extracted) {
-  const b = extracted?.behaviors || {};
-  return (
-    hasShellClipboardPayload(extracted) ||
-    (b.autoDownloads?.length > 0) ||
-    (b.dangerousUris?.length > 0) ||
-    hasPhishingKitCredentialEvidence(extracted) ||
-    (hasShellPayloadInPageText(extracted) && hasClickFixLikeInstruction(extracted))
-  );
 }
 
 function hasShellPayloadInPageText(extracted) {
@@ -1606,6 +1622,11 @@ async function dispatchResult(source, url, verdict, meta) {
   if (source === "navigation" && sev === "ok") {
     return; // 일반 브라우징에서 안전 알림은 과도하게 시끄럽다.
   }
+  if (source === "popup") {
+    // popup 이 자체 UI 로 verdict 표시. 추가 OS 알림은 중복 UX 이고, 알림이 뜨는 순간
+    // popup blur 로 자동 닫힐 수 있어 결과 렌더링을 방해할 잠재 위험이 있다.
+    return;
+  }
 
   await notify(sev, `${head}${tail}`, `${url}\n${clamp(reason, 200)}`);
 }
@@ -1733,7 +1754,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "diagnostics") {
     (async () => {
       const modelAvailability = await checkAvailability();
-      let ocrInfo = { ocrAvailable: false, ocrLanguages: [], tesseractFilesPresent: [] };
+      // offscreen 의 OCR_DIAGNOSTICS 응답 shape: { available, languages }
+      let ocrInfo = { available: false, languages: [] };
       try {
         ocrInfo = await sendToOffscreen({ type: "OCR_DIAGNOSTICS" });
       } catch {}

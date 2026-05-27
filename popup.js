@@ -239,10 +239,16 @@ async function init() {
         return;
       }
       stopTicker = startStageTicker();
-      const v = await chrome.runtime.sendMessage({ type: "scan", url: tab.url, tabId: tab.id, source: "popup" });
+      // SW 가 응답하지 않으면 UI 가 영구 stuck 되지 않게 60초 안전망. single-flight 가 적용돼
+      // 정상 케이스는 빠르게 끝나지만, LM 세션 초기화·extract 행 등 외부 요인으로 길어질 수 있다.
+      const scanPromise = chrome.runtime.sendMessage({ type: "scan", url: tab.url, tabId: tab.id, source: "popup" });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("scan_timeout_60s")), 60000));
+      const v = await Promise.race([scanPromise, timeoutPromise]);
       renderVerdict(v);
     } catch (e) {
-      $("result").innerHTML = `<div class="verdict v-warn">${t("popup.error", String(e))}</div>`;
+      const errMsg = String(e?.message || e).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+      $("result").innerHTML = `<div class="verdict v-warn">${t("popup.error", errMsg)}</div>`;
     } finally {
       if (stopTicker) stopTicker();
       const status = await refreshStatus().catch(() => ({ availability: latestAvailability }));
