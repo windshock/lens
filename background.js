@@ -53,6 +53,19 @@ const VERDICT_SCHEMA = {
 
 const INTERNAL_DOMAINS = ["skplanet.com", "sktelecom.com", "sk.com", "localhost", "127.0.0.1", "::1"];
 
+// LM 이 brand 를 일관된 케이싱으로 돌려주지 않음(예: "Claude" vs "deepseek ai") → 객체 키 직접 접근
+// 시 대소문자 불일치로 OFFICIAL_DOMAINS lookup 이 miss → O1 override 전체 skip.
+// 모듈 로드 시 소문자 키 Map 한 번 만들어두고, 변형(전체/"AI" 접미 제거/첫 단어) 셋을 케이스 무시로 시도.
+function lookupOfficialDomains(brand) {
+  if (!brand) return null;
+  const lc = String(brand).toLowerCase().trim();
+  if (!lc) return null;
+  return OFFICIAL_DOMAINS_LC.get(lc)
+    || OFFICIAL_DOMAINS_LC.get(lc.replace(/\s+ai$/i, "").trim())
+    || OFFICIAL_DOMAINS_LC.get(lc.split(/\s+/)[0])
+    || null;
+}
+
 // 브랜드 ↔ 정식 도메인 화이트리스트. 모델이 브랜드를 식별했는데 도메인이
 // 이 목록의 어느 것에도 매칭 안 되고 free-hosting 서브도메인이면 강제 피싱 판정.
 const OFFICIAL_DOMAINS = {
@@ -151,6 +164,12 @@ const OFFICIAL_DOMAINS = {
   "Aladin":       ["aladin.co.kr"],
   "알라딘":       ["aladin.co.kr"],
 };
+
+// lookupOfficialDomains 가 사용하는 소문자 키 Map — OFFICIAL_DOMAINS 정의 직후 한 번 빌드.
+const OFFICIAL_DOMAINS_LC = new Map(
+  Object.entries(OFFICIAL_DOMAINS).map(([k, v]) => [k.toLowerCase(), v])
+);
+
 // 무료 호스팅 / 단명 서브도메인 / 누구나 임의 콘텐츠 올리는 클라우드 스토리지·CDN.
 // 정식 브랜드 사이트는 이런 곳에 안 박힘 — 브랜드 사칭 발견 + 이 호스팅이면 거의 확실히 피싱.
 const FREE_HOSTING_RE = /(?:^|\.)(?:workers\.dev|pages\.dev|vercel\.app|netlify\.app|netlify\.com|replit\.dev|repl\.co|github\.io|gitlab\.io|weebly\.com|webflow\.io|web\.app|firebaseapp\.com|surge\.sh|onrender\.com|glitch\.me|wixsite\.com|squarespace\.com|wordpress\.com|blogspot\.com|tiiny\.site|herokuapp\.com|cyclic\.app|fly\.dev|deno\.dev|render\.com|ngrok\.io|ngrok-free\.app|trycloudflare\.com|amplifyapp\.com|amazonaws\.com|cloudfront\.net|azurewebsites\.net|azureedge\.net|azurestaticapps\.net|blob\.core\.windows\.net|web\.core\.windows\.net|storage\.googleapis\.com|appspot\.com|run\.app|digitaloceanspaces\.com|ondigitalocean\.app|backblazeb2\.com|fastly\.net|b-cdn\.net|github\.dev|githubusercontent\.com|gitlab\.io|s3-website[-.][a-z0-9-]+\.amazonaws\.com)$/i;
@@ -862,6 +881,11 @@ async function cacheSet(key, val) {
 // 이라 SW idle 종료 시 자연히 비워진다. bypassCache(eval harness)는 dedup 제외.
 const inflightScans = new Map();
 
+// in-flight awaiter 에서 dispatchResult 재발화가 필요한 source. 부수효과(탭 가로채기 / 배너 / 알림)가
+// dispatchResult 안에서만 일어나는 source 들이며, return 값으로 처리되는 popup/click-guard/
+// download-silent-ok/eval/fixture 는 제외해 중복 알림을 피한다.
+const AWAITER_DISPATCH_SOURCES = new Set(["navigation", "owa", "contextMenu", "action"]);
+
 function hostFromUrl(url) {
   try { return new URL(url).hostname.toLowerCase(); }
   catch { return ""; }
@@ -925,7 +949,19 @@ async function scanUrl(url, source, meta = {}) {
   if (!bypassLookup) {
     const existing = inflightScans.get(key);
     if (existing) {
-      try { return await existing; } catch {}
+      try {
+        const verdict = await existing;
+        // leader 가 dispatchResult 를 leader 의 source 로 단 한 번만 호출하므로, awaiter 가 다른
+        // source 였다면 awaiter 의 부수효과(navigation→warning.html 탭 가로채기, owa→배너 주입,
+        // contextMenu→OS 알림)가 누락된다. 부수효과가 명확한 source 만 재발화한다.
+        // popup/click-guard/download-silent-ok/eval/fixture 는 return 값으로 충분하므로 제외 —
+        // 재발화하면 중복 OS 알림이 발생한다.
+        if (verdict && typeof verdict === "object" && !verdict.error
+            && AWAITER_DISPATCH_SOURCES.has(source)) {
+          await dispatchResult(source, url, verdict, { ...meta, dedupAwaiter: true });
+        }
+        return verdict;
+      } catch {}
     }
   }
   const work = _runScan(url, source, meta, key, bypassLookup);
@@ -1329,14 +1365,25 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
 
   // [O1-whois] brand 가 RDAP Registrant 또는 CT issuer Org 와 매칭되면 OFFICIAL_DOMAINS
   // 등록 여부와 무관하게 정식 도메인으로 인정 — 큐레이션 갭(예: microsoftonline.com)을 자동 보강.
-  // 매칭 대상: "Registrant: Microsoft Corporation" 또는 "IssuerOrg: Microsoft Corporation" 등.
-  if (verdict.brand && whois) {
+  // 매칭 대상은 독립 소유권 증거인 "Registrant:" / "IssuerOrg:" 세그먼트로 제한한다.
+  // yesnic의 Domain Name / Name Server / Contact는 검사 대상 도메인을 되비추는 값이라
+  // 브랜드 hallucination의 자기검증 근거로 쓰면 안 된다.
+  // [free-hosting 가드] 공유 호스팅(azurewebsites.net / appspot.com / amazonaws.com 등)에선
+  // Registrant 가 platform 운영사(Microsoft/Google/Amazon)로 비치지만 그 안의 테넌트 콘텐츠
+  // 소유권을 증명하지 않는다. 이 평면에서 ownership 매칭은 silent FN 으로 직결 — O1 의 danger
+  // 의도를 무력화하던 패치였음. 공유 호스팅에선 O1-whois 자체를 skip.
+  if (verdict.brand && whois && !finalOnFree && !origOnFree) {
     const brandRaw = verdict.brand.toLowerCase().replace(/\s+ai\b/i, "").trim();
     const brandTokens = [brandRaw, ...brandRaw.split(/\s+/)]
       .map(t => t.replace(/[^a-z0-9]/g, ""))
       .filter(t => t.length >= 4);
-    const whoisLower = whois.toLowerCase();
-    const whoisHasBrand = brandTokens.some(t => whoisLower.includes(t));
+    const ownershipEvidence = String(whois)
+      .split("|")
+      .map(s => s.trim())
+      .filter(s => /^(Registrant|IssuerOrg)\s*:/i.test(s))
+      .join(" | ");
+    const ownershipLower = ownershipEvidence.toLowerCase();
+    const whoisHasBrand = ownershipLower && brandTokens.some(t => ownershipLower.includes(t));
     if (whoisHasBrand) {
       overrides.push({
         rule: "O1-whois",
@@ -1355,9 +1402,7 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
 
   // [O1] 브랜드 ↔ 정식 도메인 불일치 (가장 흔한 사칭 케이스)
   if (verdict.brand && !overrides.some(o => o.rule === "O1-whois")) {
-    const officialList = OFFICIAL_DOMAINS[verdict.brand]
-      || OFFICIAL_DOMAINS[verdict.brand.replace(/\s+AI$/i, "")]
-      || OFFICIAL_DOMAINS[verdict.brand.split(/\s+/)[0]];
+    const officialList = lookupOfficialDomains(verdict.brand);
     if (officialList) {
       const highConfidencePhishEvidence =
         hasCredentialLikeForms(extracted) ||
@@ -1628,7 +1673,13 @@ async function dispatchResult(source, url, verdict, meta) {
     return;
   }
 
-  await notify(sev, `${head}${tail}`, `${url}\n${clamp(reason, 200)}`);
+  // notify 실패(예: chrome.notifications.create 가 iconUrl 디코딩 못함, OS-level 알림 권한 거부 등)가
+  // scan verdict 손실로 이어지면 안 된다 — 알림은 UX 부수효과이고 verdict 는 핵심 출력.
+  try {
+    await notify(sev, `${head}${tail}`, `${url}\n${clamp(reason, 200)}`);
+  } catch (e) {
+    console.warn("notify failed:", e);
+  }
 }
 
 // ───────────────────────── 트리거 핸들러 ─────────────────────────

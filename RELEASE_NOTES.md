@@ -1,3 +1,67 @@
+# ScamGuard AI v0.1.32 Release Notes
+
+This release closes three regressions discovered while validating v0.1.31 against the known phishing corpus, and adds a structural guard against a silent false-negative class in the `O1-whois` ownership override.
+
+## 🛡 O1-whois no longer false-safes shared-hosting brand impersonation
+
+The v0.1.31 fix restricted `O1-whois` matching to `Registrant:` and `IssuerOrg:` segments — independent ownership evidence. That was correct as far as it went. But on shared cloud platforms (`*.azurewebsites.net`, `*.appspot.com`, `*.amazonaws.com`, `*.firebaseapp.com`, etc.), the registered domain belongs to the platform operator, not to the tenant serving the page. RDAP for `azurewebsites.net` returns `Registrant: Microsoft Corporation` — true for the platform, but every Azure tenant inherits this. A phishing page impersonating Microsoft on Azure-hosted infrastructure would trip `O1-whois` and be marked safe.
+
+### Fix
+
+`O1-whois` now bails out when either the original URL or the final URL matches `FREE_HOSTING_RE`. The existing `O1` brand-mismatch branch then runs as designed, producing a danger verdict for the same shared-hosting plus brand-mismatch pattern.
+
+### What this does and does not change
+
+For domains we observed in regression (workers.dev, pages.dev, firebaseapp.com), platform RDAP is currently either redacted (Google's MarkMonitor privacy) or the impersonated brand doesn't substring-match the platform owner (Cloudflare is rarely the impersonation target). The guard does not alter verdicts for those cases. It does close the silent-FN class for `azurewebsites.net` / `appspot.com` / `amazonaws.com` impersonation when the platform's own RDAP is public and the impersonated brand shares a token with the platform owner.
+
+Legitimate Microsoft/Google/Amazon content that happens to live on their own shared-hosting subdomain loses the `O1-whois` short-circuit. In practice those organisations serve user-facing content from their own registered domains, so this loss case is rare.
+
+## 🔁 Single-flight awaiter now re-dispatches when source differs from leader
+
+`scanUrl`'s single-flight map collapses concurrent calls for the same URL onto a single LM run. v0.1.31 only invoked `dispatchResult` once per scan, using the **leader's** source. Side effects that live inside `dispatchResult` — `warning.html` tab interception for `navigation`, OWA per-anchor badge injection, deterministic notifications for `contextMenu` / `action` — were silently dropped for any later awaiter whose source differed from the leader's.
+
+Concrete race: popup is leader (it suppresses notification by design), navigation arrives second as awaiter and never triggers its tab intercept — the user remains on the phishing page.
+
+### Fix
+
+A new `AWAITER_DISPATCH_SOURCES = {"navigation", "owa", "contextMenu", "action"}` set restricts awaiter re-dispatch to sources whose effect lives inside `dispatchResult`. `popup` / `click-guard` / `download-silent-ok` / `eval` / `fixture` are explicitly excluded — those sources consume the return value directly, and re-dispatch would only duplicate notifications. Awaiter dispatch passes `meta.dedupAwaiter: true` for traceability.
+
+## 🔡 `OFFICIAL_DOMAINS` lookup is now case-insensitive
+
+The LM does not return brand strings with consistent casing — `"Claude"` one call, `"deepseek ai"` another, `"Microsoft Corporation"` a third. `OFFICIAL_DOMAINS` keys are CamelCase, so `OFFICIAL_DOMAINS[verdict.brand]` silently missed for lowercase outputs, which made `O1`'s entire brand-mismatch branch skip and the LM's `phishing=false` verdict pass through. A known DeepSeek phishing URL on `pages.dev` was a confirmed false-negative.
+
+### Fix
+
+New `lookupOfficialDomains(brand)` helper normalises to lowercase, strips a trailing `" AI"` suffix, and tries first-word fallback. Module-scope `OFFICIAL_DOMAINS_LC` is built once from `OFFICIAL_DOMAINS` so each lookup is O(1).
+
+## 🛟 `notify()` failure no longer destroys the verdict
+
+SPOF testing with all SW `fetch` calls stubbed revealed that `chrome.notifications.create` internally fetches the `iconUrl` (a data URL stored in `chrome.storage.local`), and that fetch failing surfaces as an exception out of `notify()`. Previously the exception propagated through `dispatchResult` → `finalizeVerdict` and turned a successful scan into `{ error: "Unable to download all specified images." }` returned to the caller.
+
+### Fix
+
+`dispatchResult` wraps the final `notify()` call in `try/catch` and logs a warning instead. The verdict object continues to flow back through the promise chain.
+
+## 🧪 Reusable test runners
+
+Three paste-runnable files now live under `eval/`:
+
+- `eval/run_regression.js` — loads `eval/fixture_manifest.json` (now 13 cases including `nate.com` / `naver.com` / `github.com` / `microsoft.com` safe baselines plus three known phishing URLs) and reports PASS/FAIL per fixture from the popup console.
+- `eval/run_spof.js` — defines `__spof_TNX` / `__spof_TIP` / `__spof_TALLDOWN` / `__spof_TSLOW` to exercise DNS-failure, IP-only, all-fetch-blocked, and slow-loading failure modes.
+- `eval/spof_sw_helpers.js` — Service Worker console helper exposing `__spof.blockAllFetch()` / `__spof.restore()` for the T-ALL-DOWN scenario.
+
+All three are loaded via `<script>` injection rather than `fetch().then(eval)` so they work under the extension page's `script-src 'self'` CSP. The Service Worker helper is paste-only since the SW context has no `document`.
+
+## 📐 Internal-domain policy made explicit
+
+The v0.1.29 "skip extract/OCR/LLM entirely for internal domains" change made `127.0.0.1` short-circuit before `hardEvidencePrecheck` could see any content. The two legacy `localhost-danger-fixture` / `localhost-hard-evidence-fixture` entries in `eval/fixture_manifest.json` were expecting the pre-v0.1.29 behaviour and were silently failing the fixture pass. They have been updated to `expectedPhishing: false, maxScore: 0` with a note documenting the policy decision (internal domains are unconditionally trusted; if this policy is ever revised the fixtures must move first).
+
+## 📜 Spec-driven development docs landed
+
+This repository now carries three living spec documents — `docs/development-spec.md`, `security-architecture-review.md`, `security-product-requirements.md` — that capture functional requirements, the DFD/trust-boundary model, and a priority-tagged security backlog (SPR-001 through SPR-010). The README's "Zero-Data" wording was refined to distinguish "no external LLM receives browsing data" from "outbound WHOIS/RDAP/CT lookups and OCR image fetches do happen". OWA Enterprise Support is marked as disabled-in-current-manifest to match `manifest.json`'s actual `content_scripts` list.
+
+---
+
 # ScamGuard AI v0.1.31 Release Notes
 
 ## ⏱ Popup no longer hangs for 30–50 seconds on the same URL
