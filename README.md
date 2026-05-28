@@ -4,7 +4,9 @@
 ![Gemini Nano](https://img.shields.io/badge/AI-Gemini%20Nano-purple.svg)
 ![Privacy](https://img.shields.io/badge/Privacy-100%25%20On--Device-success.svg)
 
-ScamGuard AI is a highly private, **100% on-device** phishing and scam detection Chrome Extension. It leverages Chrome's built-in **Gemini Nano (Prompt API)** to analyze links, page context, and structure in real time—without ever sending your browsing data to an external server.
+ScamGuard AI is a highly private, **on-device LLM** phishing and scam detection Chrome Extension. It leverages Chrome's built-in **Gemini Nano (Prompt API)** to analyze links, page context, and structure in real time — without ever sending page content, URLs, or OCR text to an external LLM.
+
+> **Privacy boundary**: Phishing classification (LLM inference + OCR) runs locally. The extension may still load the target page in an inactive scan tab, fetch page images for OCR, and query public domain-ownership metadata (yesnic WHOIS / rdap.org / crt.sh). No browsing data is sent to a remote inference server.
 
 ---
 
@@ -19,12 +21,12 @@ Read the bilingual public introduction page:
 
 ## ✨ Features
 
-- **Zero-Data Privacy**: All URL and link scanning happens locally on your device. Your browsing data is NEVER sent to an external server.
+- **Zero-Data LLM**: Page content, URLs, and OCR text are processed only by the local Gemini Nano model. No external LLM API receives your browsing data. Domain-ownership metadata (WHOIS/RDAP/CT) is queried from public services to corroborate brand legitimacy.
 - **Gemini Nano Integration**: Utilizes Google's on-device Prompt API for fast, reliable, and private phishing detection.
 - **Real-Time Link Scanning**: Proactively checks clicked links and warns you before you navigate to a malicious site.
 - **Smart Download Blocking**: Intercepts downloads hosted on known phishing domains.
 - **On-the-fly OCR & DOM Analysis**: Uses local Tesseract OCR and advanced DOM parsing to inspect visual and structural threats in real-time.
-- **OWA Enterprise Support**: Automatically scans and places warning badges on suspicious external links within enterprise webmails.
+- **OWA Enterprise Support** *(disabled in current manifest, code preserved for reactivation)*: Automatic OWA mail scanning is currently not injected by the manifest. The `owa_scan.js` / `owa_banner.css` code is preserved in the repository; reactivation requires restoring the corresponding `content_scripts` entry.
 
 ---
 
