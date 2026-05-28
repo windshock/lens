@@ -1,10 +1,14 @@
-# ScamGuard AI 🛡️
+# Windshock Lens 🛡️
+
+> Formerly *ScamGuard AI*. Renamed to Windshock Lens in v0.2.0 (2026-05-28). Historical releases up to v0.1.32 remain published under the previous name.
 
 ![Chrome Version](https://img.shields.io/badge/Chrome-138+-blue.svg)
 ![Gemini Nano](https://img.shields.io/badge/AI-Gemini%20Nano-purple.svg)
-![Privacy](https://img.shields.io/badge/Privacy-100%25%20On--Device-success.svg)
+![Privacy](https://img.shields.io/badge/Privacy-On--Device%20LLM-success.svg)
 
-ScamGuard AI is a highly private, **on-device LLM** phishing and scam detection Chrome Extension. It leverages Chrome's built-in **Gemini Nano (Prompt API)** to analyze links, page context, and structure in real time — without ever sending page content, URLs, or OCR text to an external LLM.
+**Private, on-device scam and phishing analysis for your browser.**
+
+Windshock Lens is a Chrome MV3 extension that triages suspicious links and pages directly inside the browser using Chrome's built-in **Gemini Nano (Prompt API)** combined with deterministic security rules. Page content, URLs, and OCR text are processed entirely on-device — no external LLM API receives your browsing data.
 
 > **Privacy boundary**: Phishing classification (LLM inference + OCR) runs locally. The extension may still load the target page in an inactive scan tab, fetch page images for OCR, and query public domain-ownership metadata (yesnic WHOIS / rdap.org / crt.sh). No browsing data is sent to a remote inference server.
 
@@ -21,7 +25,7 @@ Read the bilingual public introduction page:
 
 ## ✨ Features
 
-- **Zero-Data LLM**: Page content, URLs, and OCR text are processed only by the local Gemini Nano model. No external LLM API receives your browsing data. Domain-ownership metadata (WHOIS/RDAP/CT) is queried from public services to corroborate brand legitimacy.
+- **On-device LLM**: Page content, URLs, and OCR text are processed only by the local Gemini Nano model. No external LLM API receives your browsing data. Domain-ownership metadata (WHOIS/RDAP/CT) is queried from public services to corroborate brand legitimacy.
 - **Gemini Nano Integration**: Utilizes Google's on-device Prompt API for fast, reliable, and private phishing detection.
 - **Real-Time Link Scanning**: Proactively checks clicked links and warns you before you navigate to a malicious site.
 - **Smart Download Blocking**: Intercepts downloads hosted on known phishing domains.
@@ -33,7 +37,7 @@ Read the bilingual public introduction page:
 ## 📂 Project Structure
 
 ```text
-scamguard-ai/
+scamguard-ai/                     # repo name (unchanged from ScamGuard AI era)
 ├── manifest.json              # Chrome MV3 Extension Manifest (Requires Chrome 138+)
 ├── background.js              # Service Worker: LLM session, triggers, download interception
 ├── content_extract.js         # Content Script: Extracts DOM/Forms/Links from hidden tabs
@@ -61,7 +65,7 @@ scamguard-ai/
 ### Load the Extension
 1. Open Chrome and go to `chrome://extensions/`.
 2. Toggle on **Developer mode** in the top right corner.
-3. Click **Load unpacked** and select the `scamguard-ai` project directory.
+3. Click **Load unpacked** and select the project directory.
 4. Open the extension popup to verify the AI model is ready!
 
 ---
