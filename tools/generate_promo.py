@@ -163,15 +163,72 @@ def make_marquee():
     img.save(out, "PNG")
     print(f"  {out.name}")
 
+def make_og_card():
+    """1200×630 OpenGraph / Twitter card image.
+
+    Saved under docs/ so GitHub Pages serves it at
+    https://windshock.github.io/lens/og-card.png.
+    Referenced from docs/index.html as og:image and twitter:image.
+    """
+    W, H = 1200, 630
+    img = Image.new("RGB", (W, H), BRAND_COLOR_BG)
+    draw = ImageDraw.Draw(img)
+
+    # Accent stripe on left
+    draw.rectangle([(0, 0), (10, H)], fill=BRAND_COLOR_ACCENT)
+
+    # Shield icon on left
+    shield_size = 220
+    shield_cx, shield_cy = 220, H // 2
+    draw_shield_at(draw, shield_cx, shield_cy, shield_size, BRAND_COLOR_ACCENT)
+
+    # Brand wordmark
+    text_left = 400
+    brand_font = find_font(88, bold=True)
+    draw.text((text_left, 180), "Windshock", fill=BRAND_COLOR_TEXT, font=brand_font)
+    bbox = draw.textbbox((0, 0), "Windshock ", font=brand_font)
+    brand_w = bbox[2] - bbox[0]
+    draw.text((text_left + brand_w, 180), "Lens", fill=BRAND_COLOR_ACCENT, font=brand_font)
+
+    # Tagline
+    tagline_font = find_font(30, bold=False)
+    tagline_lines = [
+        "Private, on-device scam and phishing analysis for Chrome.",
+        "Catches gray-zone phishing before you click.",
+    ]
+    y = 310
+    for line in tagline_lines:
+        draw.text((text_left, y), line, fill=BRAND_COLOR_SUB, font=tagline_font)
+        y += 44
+
+    # Footer accent
+    hint_font = find_font(22, bold=False)
+    draw.text(
+        (text_left, H - 90),
+        "Gemini Nano · deterministic rules · zero external LLM",
+        fill=BRAND_COLOR_ACCENT,
+        font=hint_font,
+    )
+
+    # Save under docs/ so GitHub Pages serves it
+    docs_dir = ROOT / "docs"
+    docs_dir.mkdir(exist_ok=True)
+    out = docs_dir / "og-card.png"
+    img.save(out, "PNG")
+    print(f"  docs/{out.name}")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--marquee", action="store_true", help="Also generate 1400×560 marquee tile")
+    ap.add_argument("--no-og", action="store_true", help="Skip the 1200×630 OpenGraph card under docs/")
     args = ap.parse_args()
     ICONS_DIR.mkdir(exist_ok=True)
     print(f"Writing promo assets to {ICONS_DIR}")
     make_small_promo()
     if args.marquee:
         make_marquee()
+    if not args.no_og:
+        make_og_card()
     print("Done.")
 
 if __name__ == "__main__":
