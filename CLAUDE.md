@@ -14,7 +14,7 @@
 **4종 트리거:**
 1. 우클릭 컨텍스트 메뉴 "이 링크 피싱 검사"
 2. 툴바 액션 버튼 (현재 페이지 검사)
-3. ~~`owa.skplanet.com` 자동 스캔~~ — **v0.1.23 부터 비활성**. owa_scan.js / owa_banner.css 파일은 보존되어 있고 manifest.json 의 content_scripts 엔트리만 제거. 재활성화는 그 블록 복원만 하면 됨.
+3. ~~`owa.skplanet.com` 자동 스캔~~ — **v0.1.23 비활성, v0.2.x 코드 삭제**. `owa_scan.js` / `owa_banner.css` 가 git history (~v0.2.0 직전 커밋) 에 남아있어 필요 시 복원 가능. Chrome Web Store reviewer 가 Personal Communications 카테고리로 분류할 위험을 회피하기 위해 본체에서 제거.
 4. 다운로드 시작 시 — 호스팅 페이지(`referrer`)를 검사, 피싱 판정이면 `chrome.downloads.cancel`
 
 **핵심 데이터 흐름:** SW → 숨김 탭으로 URL 렌더 → content script가 forms/anchors/imgs/text 직렬화 → offscreen document에서 Tesseract OCR + WHOIS HTML 파싱 → SW가 우선순위 슬라이스 빌드 → `LanguageModel.prompt(body, { responseConstraint: VERDICT_SCHEMA })` → 캐시(`chrome.storage.session`) + 알림/배너/다운로드 차단.
@@ -29,7 +29,7 @@ scamguard-ai/
 ├── background.js              # SW — LM 세션, 4종 트리거, scanUrl(), 탭 가로채기, allowlist
 ├── content_extract.js         # 숨김 탭에 주입, DOM/form/anchor/img 직렬화
 ├── offscreen.html / .js       # OCR(Tesseract.js) + WHOIS DOMParser + 아이콘 런타임 생성
-├── owa_scan.js / owa_banner.css   # OWA 자동 스캔 + anchor 배지 + 상단 요약 바
+# OWA 자동 스캔 코드는 v0.2.x 에서 삭제. git history (pre-v0.2.0) 참조.
 ├── popup.html / popup.js      # 툴바 팝업 (상태 + 수동 스캔 + 진행 단계 표시)
 ├── verdict.html / verdict.js  # 알림 클릭 → 최근 verdict 상세 (게이지+시그널+세션 허용)
 ├── warning.html/.js/.css      # 위험 페이지 가로채기 화면 (탭이 자동 전환됨)
@@ -75,7 +75,6 @@ scamguard-ai/
 | `background.js` | `SYS` 시스템 프롬프트 상수, `VERDICT_SCHEMA` JSON 스키마, `scanUrl(url, source, meta)` 단일 진입점, 4종 트리거 핸들러, 캐시·세션 allowlist(`chrome.storage.session`), 알림(`notifIcons` data URL), 다운로드 pause/cancel/resume, **위험 verdict 시 활성 탭을 `warning.html` 로 강제 전환**, `onInstalled`/`onStartup` 에서 아이콘 런타임 생성 트리거. |
 | `content_extract.js` | `script/style/svg/iframe` 제거 후 input·textarea·form·select·button 직렬화, anchor href+text(최대 40), img src(최대 12), `body.innerText` 반환. SW에 IIFE 반환값으로 전달. |
 | `offscreen.js` | `OCR` 메시지: 이미지를 fetch→blob→Tesseract `recognize`(eng+kor), 이미지당 200자/총 800자 캡. `OCR_DIAGNOSTICS` 메시지: OCR 런타임/언어 파일 가용성 반환. `WHOIS_PARSE` 메시지: yesnic HTML에서 testyesnic의 정확한 td 셀렉터로 파싱 후 7키 한 줄 압축. `GENERATE_ICONS` 메시지: OffscreenCanvas로 액션(16/32/48/128)·알림(ok/warn/danger 128) 방패 아이콘 생성. |
-| `owa_scan.js` | `MutationObserver`로 `[role="document"]`/`[class*="ReadingPane"]`/`[class*="ItemContent"]` 패턴 매칭 + 외부 anchor 추출 + SW에 검사 요청. `verdict-banner` 회신 시 `<span class="pg-badge">` 주입. **위험 anchor 누적 시 본문 상단에 `.pg-summary` 빨간 바**(클릭 시 첫 위험 anchor로 스크롤). 30초 무매칭이면 `console.warn` — 단, 실제 OWA 컨텍스트(owa.skplanet.com 또는 OWA DOM 존재)일 때만 경고. |
 | `popup.js` | `availability` 조회 후 상태 표시, "현재 페이지 검사" 버튼이 `chrome.runtime.sendMessage({type:"scan", url})` 호출. 스캔 중 단계 표시(페이지 로드→추출→OCR/WHOIS→추론), 결과에 "자세히 보기" 링크. |
 | `warning.html`/`.js`/`.css` | 활성 탭이 자동 전환되는 풀스크린 빨간 경고. `?u=&vid=` querystring으로 URL+verdict id 받음. [돌아가기]→`closeTab` 메시지, [그래도 계속]→`allowlist` 메시지 후 원본 URL로 `location.replace`. |
 | `verdict.html`/`.js` | conic-gradient 게이지로 phishing_score 시각화 + 시그널 카드(brand/suspicious_domain/phishing) + "이 세션 동안 허용" 버튼. |
@@ -115,7 +114,7 @@ scamguard-ai/
 
 - **T1 컨텍스트 메뉴**: `phishingurls.txt` 의 `http://211.188.179.86:8686/down/...` 를 빈 페이지에 붙여넣고 우클릭 → 빨간 알림, score ≥ 7. `https://www.google.com` 우클릭 → 초록 알림.
 - **T2 툴바**: 위 URL로 직접 이동 → 툴바 아이콘 클릭 → 팝업에서 동일 verdict.
-- **T3 OWA**: `owa.skplanet.com` 로그인 → 외부 링크 포함 메일 열기 → 각 anchor 옆 배지 ≤ 10초.
+- **T3 OWA**: 코드 삭제됨 (v0.2.x). 해당 시나리오 검증 불필요.
 - **T4 다운로드**: 위 phishing URL이 호스팅하는 다운로드 트리거 → 빨간 알림, `~/Downloads` 에 파일 없음. github 릴리스 zip 다운로드는 무알림으로 완료.
 
 **비활성 상태 검증:** Chrome을 `--disable-features=OptimizationGuideOnDeviceModel` 로 재실행 → 배지 `X`, 4개 트리거 전부 no-op. "폴백 없음" 요구사항 증명.
@@ -157,7 +156,6 @@ chrome.runtime.sendMessage({ type: "diagnostics" })
 | 토큰 초과 다발 | `background.js` 의 `buildPromptSlices()` 캡 조정 |
 | OCR 결과 비어있음 | `offscreen.js` 의 `ocrImages` + `checkOcrAvailability()` + `lib/README.md` 의 Tesseract 배치 확인 |
 | OCR/모델 진단 | `chrome.runtime.sendMessage({type:"diagnostics"})` → `background.js` 핸들러 + `offscreen.js` 의 `OCR_DIAGNOSTICS` |
-| OWA DOM 안 잡힘 | `owa_scan.js` 의 `PANEL_SELECTORS` 확장 |
 | 사내 도메인 추가 | `background.js` 의 `INTERNAL_DOMAINS` 배열 |
 | Gemini Nano 미지원 환경에서 동작 원함 | 정책 변경 사안 — 현 설계는 의도적으로 폴백 없음 |
 

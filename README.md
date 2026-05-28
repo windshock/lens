@@ -21,6 +21,10 @@ Read the bilingual public introduction page:
 - GitHub Pages: https://windshock.github.io/scamguard-ai/
 - Source: [docs/index.html](docs/index.html)
 
+## 🔒 Privacy Policy
+
+See [docs/privacy.md](docs/privacy.md) for the full privacy policy — what data is processed, where it stays, what is transmitted, and detailed permission justifications.
+
 ---
 
 ## ✨ Features
@@ -30,7 +34,6 @@ Read the bilingual public introduction page:
 - **Real-Time Link Scanning**: Proactively checks clicked links and warns you before you navigate to a malicious site.
 - **Smart Download Blocking**: Intercepts downloads hosted on known phishing domains.
 - **On-the-fly OCR & DOM Analysis**: Uses local Tesseract OCR and advanced DOM parsing to inspect visual and structural threats in real-time.
-- **OWA Enterprise Support** *(disabled in current manifest, code preserved for reactivation)*: Automatic OWA mail scanning is currently not injected by the manifest. The `owa_scan.js` / `owa_banner.css` code is preserved in the repository; reactivation requires restoring the corresponding `content_scripts` entry.
 
 ---
 
@@ -70,5 +73,6 @@ scamguard-ai/                     # repo name (unchanged from ScamGuard AI era)
 
 ---
 
-## ⚖️ License
-This project is for experimental and proof-of-concept purposes. Use at your own risk.
+## ⚖️ Disclaimer
+
+Windshock Lens is an open-source security tool that complements — not replaces — your existing browser safety measures (Chrome Safe Browsing, enterprise EDR, etc.). Phishing detection is a probabilistic problem; verdicts are estimates, false positives and false negatives both occur. Evaluate fit for your specific threat model before relying on it. Use at your own risk.
