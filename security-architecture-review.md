@@ -1,4 +1,6 @@
-# ScamGuard AI Security Architecture Review
+# Windshock Lens Security Architecture Review
+
+> Formerly ScamGuard AI. Renamed in v0.2.0 (2026-05-28).
 
 Date: 2026-05-28  
 Scope target: Chrome MV3 extension in this repository  
@@ -7,7 +9,7 @@ Primary spec: `docs/development-spec.md`
 
 ## 1. Scope And Dependencies
 
-ScamGuard AI is a local Chrome extension that detects phishing pages using Chrome built-in Gemini Nano plus deterministic browser-side signals. Runtime dependencies and integrations:
+Windshock Lens is a local Chrome extension that detects phishing pages using Chrome built-in Gemini Nano plus deterministic browser-side signals. Runtime dependencies and integrations:
 
 | Component | Role | Evidence |
 |---|---|---|

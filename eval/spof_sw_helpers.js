@@ -6,7 +6,7 @@
 // 에 접근 불가하므로 이 헬퍼는 별도 컨텍스트(SW DevTools)에서 실행해야 한다.
 //
 // 사용법:
-//   1) chrome://extensions → ScamGuard AI 카드 "service worker" 링크 클릭 → 별도 DevTools 창
+//   1) chrome://extensions → Windshock Lens 카드 "service worker" 링크 클릭 → 별도 DevTools 창
 //   2) 그 SW DevTools Console 에 아래 IIFE 전체 paste → globalThis.__spof 노출
 //      ※ SW 는 Worker 컨텍스트라 document.createElement 불가 — popup 에서 쓰던 <script> 인젝션
 //        방식은 SW 에서 안 됨. paste 가 정답.

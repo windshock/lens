@@ -1,4 +1,6 @@
-# ScamGuard AI — 프로젝트 가이드 (AI 친화 문서)
+# Windshock Lens — 프로젝트 가이드 (AI 친화 문서)
+
+> v0.2.0 부터 ScamGuard AI 에서 Windshock Lens 로 리네임. 저장소 디렉터리명 `scamguard-ai` 는 유지 (repo 이름 변경 별도 결정). 코드/문서의 product 표기는 Windshock Lens.
 
 > 이 디렉터리는 **Chrome MV3 확장 (Gemini Nano 온디바이스 피싱 검사기)** 입니다.
 > 과거 Python 파이프라인(Selenium + Ollama llama3)은 `legacy/python_pipeline/` 으로 보존되어 있으며, 더 이상 런타임 컴포넌트가 아닙니다.

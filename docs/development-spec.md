@@ -1,4 +1,6 @@
-# ScamGuard AI Development Spec
+# Windshock Lens Development Spec
+
+> Formerly ScamGuard AI. Renamed in v0.2.0 (2026-05-28). All product-level references below are Windshock Lens.
 
 작성일: 2026-05-28 (Asia/Seoul)  
 대상 버전: v0.1.31  
@@ -7,7 +9,7 @@
 
 ## 1. 제품 목적
 
-ScamGuard AI는 Chrome MV3 확장 프로그램으로, 사용자가 방문하거나 클릭하려는 웹 페이지가 피싱/스캠인지 Chrome 내장 Gemini Nano Prompt API와 결정론적 룰로 판단한다. 설계의 중심은 외부 LLM API를 쓰지 않는 온디바이스 추론, 명확한 위험 신호의 코드 기반 강제 판정, 사용자가 오탐을 해소할 수 있는 allowlist/reset 제어다.
+Windshock Lens는 Chrome MV3 확장 프로그램으로, 사용자가 방문하거나 클릭하려는 웹 페이지가 피싱/스캠인지 Chrome 내장 Gemini Nano Prompt API와 결정론적 룰로 판단한다. 설계의 중심은 외부 LLM API를 쓰지 않는 온디바이스 추론, 명확한 위험 신호의 코드 기반 강제 판정, 사용자가 오탐을 해소할 수 있는 allowlist/reset 제어다.
 
 주의: 제품 설명의 "Zero-Data"는 외부 LLM API로 브라우징 데이터를 보내지 않는다는 의미로 해석해야 한다. 현재 구현은 사용자가 연 페이지 또는 hidden scan tab을 통해 대상 페이지/서브리소스를 로드할 수 있고, WHOIS/RDAP/CT 조회와 OCR 대상 이미지 fetch 같은 일부 네트워크 메타데이터/리소스 요청도 수행한다.
 

@@ -1,4 +1,6 @@
-# ScamGuard AI Security Product Requirements
+# Windshock Lens Security Product Requirements
+
+> Formerly ScamGuard AI. Renamed in v0.2.0 (2026-05-28).
 
 Date: 2026-05-28  
 Scope: security requirements derived from `docs/development-spec.md` and `security-architecture-review.md`  

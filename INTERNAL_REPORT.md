@@ -1,5 +1,7 @@
 # ScamGuard AI — 기술 명세 및 위협 인텔리전스 상세
 
+> ⚠️ **Historical snapshot** — 이 문서는 ScamGuard AI v0.1.28 시점(2026-05-18 작성) 의 내부 제안서 부속 명세이며, 본문 표기를 그대로 보존한다. 현재 제품 브랜드는 **Windshock Lens** (v0.2.0+ 부터, 2026-05-28 리네임). 향후 기술 명세 업데이트는 본 historical 문서를 갱신하기보다 `docs/development-spec.md` 와 `security-architecture-review.md` 의 living spec 을 참조.
+
 > 본 문서는 「**ScamGuard AI 개발 배경 및 시범 적용 필요성**」(이형관, 2026.05.18) 의 부속 기술 명세서이며, 본문 요약의 근거가 되는 위협 분석, 도구 아키텍처, 결정론적 룰 카탈로그, 검증 사례, 한계 및 후속 작업을 정리한다.
 
 | | |
