@@ -1,3 +1,45 @@
+# Windshock Lens v0.2.1 Release Notes
+
+Store-readiness release. No detection logic changes from v0.2.0. Everything in this release prepares the extension for Chrome Web Store submission and renames the GitHub repository to match the product brand.
+
+## 📦 Repository renamed: `scamguard-ai` → `lens`
+
+The GitHub repository is now `windshock/lens`. GitHub Pages URL is now `https://windshock.github.io/lens/`. Old URLs auto-redirect for the foreseeable future, but contributors should update their git remote:
+
+```
+git remote set-url origin https://github.com/windshock/lens.git
+```
+
+Documentation files (README, docs/index.html, docs/main.js, docs/privacy.md, docs/store-listing.md, CLAUDE.md, lib/README.md) had their hardcoded `github.com/windshock/scamguard-ai` and `windshock.github.io/scamguard-ai/` URLs flipped. Historical sections of `RELEASE_NOTES.md` and `INTERNAL_REPORT.md` were left intact because they document the project as it existed at the time of writing. The `scamguard-intro-lang` localStorage key in `docs/main.js` is preserved so visitor language preference survives.
+
+The local working-tree directory name (`scamguard-ai/` on the maintainer's machine) is independent of the repo name and is the maintainer's choice to rename.
+
+## 🗂 OWA dead code removed
+
+`owa_scan.js` and `owa_banner.css` — dead since v0.1.23 — were deleted from the working tree. Git history (pre-v0.2.1) preserves them. Rationale: Chrome Web Store reviewers may pattern-match the OWA mail-content scanning code and classify the extension as touching the Personal Communications data category, triggering heavier review. Removing the files eliminates this ambiguity.
+
+## 🔒 Privacy Policy
+
+`docs/privacy.md` is a new full privacy policy enumerating exactly what data is processed locally, what is transmitted, what is stored, and per-permission justifications. Linked from the README; will be referenced from the Chrome Web Store listing.
+
+## 🖼 Static icon assets + visual identity
+
+- `tools/generate_icons.py` — PIL-based one-shot renderer for action and notification icons. Glyphs are drawn geometrically (polylines / ellipses) instead of using Unicode characters, so they render consistently regardless of the host font's coverage. Previous Unicode-based version produced empty shields on systems whose default font lacked U+2713/U+2715.
+- `tools/generate_promo.py` — generates the Chrome Web Store promotional tiles (`icons/promo-440x280.png` always, `icons/promo-1400x560.png` marquee with `--marquee`).
+- `manifest.json#action.default_icon` and `manifest.json#icons` now reference the static PNGs. The runtime `offscreen.js#generateIcons` stays as a defensive fallback.
+
+## 📝 Store listing and submission prep
+
+- `docs/store-listing.md` — full Chrome Web Store dashboard copy (English + Korean): item name, short description, detailed description, single-purpose statement, per-permission justifications, data usage disclosures, submission checklist.
+- `docs/screenshots-guide.md` — describes the five recommended screenshots, where to capture each from inside the extension UI, and a recommended upload order. Maintainer captures these manually since they must show real running UI.
+- `tools/build_dist.sh` — produces a clean upload zip at `dist/windshock-lens-v<VERSION>.zip` containing only the files the extension runtime actually needs. Excludes docs, tools, eval, legacy, and git metadata.
+
+## 🎯 Tone shift
+
+The README disclaimer moved away from "experimental / proof-of-concept" language toward production-ready framing while keeping an honest FP/FN acknowledgement and "use at your own risk" line.
+
+---
+
 # Windshock Lens v0.2.0 Release Notes
 
 This release renames the extension from **ScamGuard AI** to **Windshock Lens**. No detection logic, runtime behavior, or storage format changes — only product naming and surrounding documentation.

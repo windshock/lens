@@ -20,7 +20,7 @@ Tesseract 버전을 올리거나 언어 데이터를 갱신할 때만 아래 절
 ### 방법 1 — npm 사용 (가장 빠름)
 
 ```bash
-cd /path/to/scamguard-ai
+cd /path/to/lens
 npm init -y
 npm install tesseract.js@^5
 cp node_modules/tesseract.js/dist/tesseract.min.js          lib/
@@ -36,7 +36,7 @@ curl -L -o lib/kor.traineddata \
 ### 방법 2 — CDN 다운로드
 
 ```bash
-cd /path/to/scamguard-ai/lib
+cd /path/to/lens/lib
 curl -L -O https://unpkg.com/tesseract.js@5/dist/tesseract.min.js
 curl -L -O https://unpkg.com/tesseract.js@5/dist/worker.min.js
 curl -L -O https://unpkg.com/tesseract.js-core@5/tesseract-core.wasm.js

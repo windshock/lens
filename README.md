@@ -18,7 +18,7 @@ Windshock Lens is a Chrome MV3 extension that triages suspicious links and pages
 
 Read the bilingual public introduction page:
 
-- GitHub Pages: https://windshock.github.io/scamguard-ai/
+- GitHub Pages: https://windshock.github.io/lens/
 - Source: [docs/index.html](docs/index.html)
 
 ## 🔒 Privacy Policy
@@ -40,7 +40,7 @@ See [docs/privacy.md](docs/privacy.md) for the full privacy policy — what data
 ## 📂 Project Structure
 
 ```text
-scamguard-ai/                     # repo name (unchanged from ScamGuard AI era)
+lens/                             # repo renamed from scamguard-ai in v0.2.1
 ├── manifest.json              # Chrome MV3 Extension Manifest (Requires Chrome 138+)
 ├── background.js              # Service Worker: LLM session, triggers, download interception
 ├── content_extract.js         # Content Script: Extracts DOM/Forms/Links from hidden tabs

@@ -76,8 +76,8 @@ Requirements
 - Chrome 138 or later
 - Gemini Nano on-device model (~2 GB, one-time download). Enable at chrome://on-device-internals.
 
-Full privacy policy: https://github.com/windshock/scamguard-ai/blob/main/docs/privacy.md
-Source code and issue tracker: https://github.com/windshock/scamguard-ai
+Full privacy policy: https://github.com/windshock/lens/blob/main/docs/privacy.md
+Source code and issue tracker: https://github.com/windshock/lens
 ```
 
 ---
@@ -119,8 +119,8 @@ Windshock Lens 는 네 개의 독립적 신호 계층을 결합합니다:
 - Chrome 138 이상
 - Gemini Nano 온디바이스 모델 (약 2GB, 1회 다운로드). chrome://on-device-internals 에서 활성화
 
-전체 개인정보 처리방침: https://github.com/windshock/scamguard-ai/blob/main/docs/privacy.md
-소스 코드 및 이슈 트래커: https://github.com/windshock/scamguard-ai
+전체 개인정보 처리방침: https://github.com/windshock/lens/blob/main/docs/privacy.md
+소스 코드 및 이슈 트래커: https://github.com/windshock/lens
 ```
 
 ---
@@ -187,7 +187,7 @@ For each above we'll check the corresponding "I do not sell or transfer user dat
 - [ ] Detailed description (en/ko) — pasted above
 - [ ] Category: Productivity
 - [ ] Language: English (primary), Korean (added)
-- [ ] Privacy policy URL: https://github.com/windshock/scamguard-ai/blob/main/docs/privacy.md
+- [ ] Privacy policy URL: https://github.com/windshock/lens/blob/main/docs/privacy.md
 - [ ] Single purpose statement — pasted above
 - [ ] Per-permission justifications — pasted above
 - [ ] Data usage disclosures — answered above

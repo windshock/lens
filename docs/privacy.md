@@ -2,7 +2,7 @@
 
 **Effective date:** 2026-05-28
 **Extension version covered:** v0.2.0 and later
-**Maintainer contact:** open a GitHub issue at https://github.com/windshock/scamguard-ai/issues
+**Maintainer contact:** open a GitHub issue at https://github.com/windshock/lens/issues
 
 This document describes what data Windshock Lens processes, where that processing happens, what leaves your device, and what is stored. It is written to satisfy the Chrome Web Store Developer Program Policies and to give users a precise picture of the extension's privacy posture.
 
@@ -136,10 +136,10 @@ To remove all data: uninstall the extension. Chrome removes all `chrome.storage`
 
 ## 8. Changes to this policy
 
-This policy is versioned in the repository alongside the extension. Material changes will be noted in `RELEASE_NOTES.md` under the corresponding release. Check https://github.com/windshock/scamguard-ai/blob/main/docs/privacy.md for the current version.
+This policy is versioned in the repository alongside the extension. Material changes will be noted in `RELEASE_NOTES.md` under the corresponding release. Check https://github.com/windshock/lens/blob/main/docs/privacy.md for the current version.
 
 ---
 
 ## 9. Contact
 
-Open a GitHub issue: https://github.com/windshock/scamguard-ai/issues
+Open a GitHub issue: https://github.com/windshock/lens/issues

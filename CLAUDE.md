@@ -1,6 +1,6 @@
 # Windshock Lens — 프로젝트 가이드 (AI 친화 문서)
 
-> v0.2.0 부터 ScamGuard AI 에서 Windshock Lens 로 리네임. 저장소 디렉터리명 `scamguard-ai` 는 유지 (repo 이름 변경 별도 결정). 코드/문서의 product 표기는 Windshock Lens.
+> v0.2.0 부터 ScamGuard AI 에서 Windshock Lens 로 리네임. v0.2.1 부터 GitHub repo 도 `scamguard-ai → lens` 로 변경 (Pages URL: `windshock.github.io/lens/`). GitHub 의 redirect 가 작동하므로 옛 URL 도 한동안 유효. 로컬 클론 시 `git remote set-url origin https://github.com/windshock/lens.git`.
 
 > 이 디렉터리는 **Chrome MV3 확장 (Gemini Nano 온디바이스 피싱 검사기)** 입니다.
 > 과거 Python 파이프라인(Selenium + Ollama llama3)은 `legacy/python_pipeline/` 으로 보존되어 있으며, 더 이상 런타임 컴포넌트가 아닙니다.
@@ -24,7 +24,7 @@
 ## 2. 디렉터리 구조
 
 ```
-scamguard-ai/
+lens/                          # 옛 이름 scamguard-ai
 ├── manifest.json              # MV3, minimum_chrome_version: 138
 ├── background.js              # SW — LM 세션, 4종 트리거, scanUrl(), 탭 가로채기, allowlist
 ├── content_extract.js         # 숨김 탭에 주입, DOM/form/anchor/img 직렬화
