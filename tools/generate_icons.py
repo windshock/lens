@@ -49,49 +49,83 @@ def find_font(font_size):
                 continue
     return ImageFont.load_default()
 
-def draw_shield(size, bg_color, glyph):
-    """Draw a rounded-rect shield with a centered glyph.
+def draw_glyph(draw, kind, cx, cy, size):
+    """Draw a glyph geometrically — system fonts often lack ✓ ✕ in regular weights.
 
-    Mirrors offscreen.js#drawShield design:
-      - Background: rounded rect, padding 1px, corner radius ~size*0.18
-      - Glyph: bold white, ~size*0.62 for single char (or 0.42 for multi)
+    kind: "check" | "bang" | "cross"
+    cx, cy: center of bounding circle
+    size: full glyph extent (~0.55 of shield size looks balanced)
+    """
+    half = size // 2
+    stroke = max(2, int(size * 0.18))
+    white = "#ffffff"
+    if kind == "check":
+        # ✓ — two-segment polyline: bottom-left, bottom-vertex, top-right
+        # Tweaked proportions: short left segment, long right segment
+        p1 = (cx - int(half * 0.65), cy + int(half * 0.05))
+        p2 = (cx - int(half * 0.10), cy + int(half * 0.55))
+        p3 = (cx + int(half * 0.70), cy - int(half * 0.55))
+        draw.line([p1, p2, p3], fill=white, width=stroke, joint="curve")
+    elif kind == "bang":
+        # ! — vertical bar + dot
+        bar_w = max(3, int(size * 0.18))
+        bar_top = cy - int(half * 0.55)
+        bar_bot = cy + int(half * 0.15)
+        draw.rounded_rectangle(
+            [(cx - bar_w // 2, bar_top), (cx + bar_w // 2, bar_bot)],
+            radius=bar_w // 2,
+            fill=white,
+        )
+        dot_r = bar_w
+        dot_cy = cy + int(half * 0.50)
+        draw.ellipse(
+            [(cx - dot_r, dot_cy - dot_r), (cx + dot_r, dot_cy + dot_r)],
+            fill=white,
+        )
+    elif kind == "cross":
+        # ✕ — two diagonal lines
+        off = int(half * 0.55)
+        draw.line(
+            [(cx - off, cy - off), (cx + off, cy + off)],
+            fill=white, width=stroke,
+        )
+        draw.line(
+            [(cx - off, cy + off), (cx + off, cy - off)],
+            fill=white, width=stroke,
+        )
+
+def draw_shield(size, bg_color, glyph_kind):
+    """Draw a rounded-rect shield with a centered geometric glyph.
+
+    Mirrors offscreen.js#drawShield aesthetics but draws the glyph as
+    polygons/lines instead of Unicode text. Reliable on any system.
     """
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     radius = max(2, int(size * 0.18))
-    # Rounded rectangle background
     draw.rounded_rectangle(
         [(1, 1), (size - 2, size - 2)],
         radius=radius,
         fill=bg_color,
     )
-    # Glyph
-    font_size = round(size * (0.42 if len(glyph) > 1 else 0.62))
-    font = find_font(font_size)
-    bbox = draw.textbbox((0, 0), glyph, font=font)
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
-    x = (size - w) // 2 - bbox[0]
-    # Slight downward nudge matches the +size*0.04 offset in offscreen.js
-    y = (size - h) // 2 - bbox[1] + int(size * 0.02)
-    draw.text((x, y), glyph, fill="#ffffff", font=font)
+    draw_glyph(draw, glyph_kind, size // 2, size // 2, int(size * 0.55))
     return img
 
 def main():
     print(f"Writing icons to {ICONS_DIR}")
-    # Toolbar action icons
+    # Toolbar action icons (✓ check)
     for size in (16, 32, 48, 128):
-        img = draw_shield(size, ACTION_COLOR, "✓")  # ✓
+        img = draw_shield(size, ACTION_COLOR, "check")
         out = ICONS_DIR / f"action-{size}.png"
         img.save(out, "PNG")
         print(f"  {out.name}")
     # Notification icons
-    for name, color, glyph in (
-        ("ok",     OK_COLOR,     "✓"),
-        ("warn",   WARN_COLOR,   "!"),
-        ("danger", DANGER_COLOR, "✕"),  # ✕
+    for name, color, kind in (
+        ("ok",     OK_COLOR,     "check"),
+        ("warn",   WARN_COLOR,   "bang"),
+        ("danger", DANGER_COLOR, "cross"),
     ):
-        img = draw_shield(128, color, glyph)
+        img = draw_shield(128, color, kind)
         out = ICONS_DIR / f"notif-{name}-128.png"
         img.save(out, "PNG")
         print(f"  {out.name}")
