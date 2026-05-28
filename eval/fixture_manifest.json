@@ -9,16 +9,16 @@
   {
     "name": "localhost-danger-fixture",
     "url": "http://127.0.0.1:8765/danger_fixture.html",
-    "expectedPhishing": true,
-    "minScore": 9,
-    "notes": "localhost라도 위험 URI/ClickFix 쉘 페이로드가 있으면 internal auto-safe를 우회"
+    "expectedPhishing": false,
+    "maxScore": 0,
+    "notes": "v0.1.29+ internal short-circuit (SPR-001 α 결정 채택): 127.0.0.1 는 INTERNAL_DOMAINS 이므로 위험 신호 포함이라도 hardEvidencePrecheck/LM 등 모든 검사 skip. 내부 도메인 무조건 신뢰 정책. 정책 변경 시 이 fixture 부터 갱신."
   },
   {
     "name": "localhost-hard-evidence-fixture",
     "url": "http://127.0.0.1:8765/hard_evidence_fixture.html",
-    "expectedPhishing": true,
-    "minScore": 9,
-    "notes": "Telegram/Discord exfil marker + credential form이면 LLM 없이 hardEvidencePrecheck에서 차단"
+    "expectedPhishing": false,
+    "maxScore": 0,
+    "notes": "v0.1.29+ internal short-circuit (SPR-001 α): hard-evidence 패턴(exfil URL + credential form) 이라도 internal 도메인은 LM 호출 없이 safe short-circuit."
   },
   {
     "name": "google-safe",
@@ -67,6 +67,41 @@
     "url": "https://project-deepsk530291kx.pages.dev",
     "expectedPhishing": true,
     "minScore": 7,
-    "notes": "DeepSeek 사칭 — pages.dev (O1)"
+    "notes": "DeepSeek 사칭 — pages.dev (O1). LM brand 출력 case-sensitivity 회귀 회로 [[lm-output-normalization]]"
+  },
+  {
+    "name": "workers-dev-claude-phish",
+    "url": "https://autumn-mud-2219.davis-drew1992.workers.dev",
+    "expectedPhishing": true,
+    "minScore": 7,
+    "notes": "Claude 사칭 — workers.dev (O1+D1)"
+  },
+  {
+    "name": "nate-safe",
+    "url": "https://www.nate.com",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "Nate 정식 — O1-whois+O5+O6 safety stack 동시 발동"
+  },
+  {
+    "name": "naver-safe",
+    "url": "https://www.naver.com",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "Naver 정식 — KR top 도메인 baseline"
+  },
+  {
+    "name": "github-safe",
+    "url": "https://github.com",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "GitHub 정식 — 개발자 툴 baseline (OFFICIAL_DOMAINS 직접 등재됨)"
+  },
+  {
+    "name": "microsoft-safe",
+    "url": "https://www.microsoft.com",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "Microsoft 정식 — 인증 도메인 보조 매핑(msauth.net 등) 까지 OFFICIAL_DOMAINS 명시"
   }
 ]
