@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Windshock Lens",
-  "version": "0.1.32",
+  "version": "0.2.0",
   "description": "Private, on-device scam and phishing analysis for your browser. Chrome built-in Gemini Nano + deterministic security rules.",
   "minimum_chrome_version": "138",
   "background": {

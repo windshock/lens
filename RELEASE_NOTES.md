@@ -1,3 +1,53 @@
+# Windshock Lens v0.2.0 Release Notes
+
+This release renames the extension from **ScamGuard AI** to **Windshock Lens**. No detection logic, runtime behavior, or storage format changes — only product naming and surrounding documentation.
+
+## 🪧 Why the rename
+
+Preliminary trademark and brand collision screening flagged two issues with the original name:
+
+- "ScamGuard / Scam Guard" is heavily collided in the market — Malwarebytes ships a feature called *Scam Guard*, plus `scamguard.com`, `scamguardai.org`, and a now-cancelled USPTO mark (`SCAMGUARD`) leave market traces that make Chrome Web Store reviewers likely to question the name.
+- An earlier candidate ("Heka") would have required a fresh trademark and brand build with no existing reputation backing.
+
+**Windshock Lens** ties the extension to the maintainer's existing security-researcher identity (`windshock.github.io` / GitHub / HackerOne), which gives Chrome Web Store publisher↔product naming consistency and reduces review friction. The `Lens` suffix keeps the function ("inspect a page before clicking") readable.
+
+- Product: **Windshock Lens**
+- Tagline: **Private, on-device scam and phishing analysis for your browser.**
+- Store title: **Windshock Lens — Scam & Phishing Triage**
+
+## ✂️ What changed
+
+User-facing:
+
+- `manifest.json#name` → `"Windshock Lens"`, English store-listing description
+- `README.md` — full brand refresh, historical-rename note at top, repo URLs left intact
+- `docs/index.html`, `docs/main.js` (GitHub Pages bilingual intro) — 26 display-name occurrences flipped, localStorage key preserved so visitor language preference survives
+
+Developer-facing:
+
+- `CLAUDE.md`, `docs/development-spec.md`, `security-architecture-review.md`, `security-product-requirements.md` — titles and body references updated
+- `eval/spof_sw_helpers.js` — comment referencing the `chrome://extensions` card
+- `INTERNAL_REPORT.md` — prepended a historical-snapshot box. Body content (dated 2026-05-18, v0.1.28 era) preserved verbatim.
+
+## 🧱 What was deliberately not changed
+
+- **Repository directory name `scamguard-ai`** — repo rename is a separate decision and would invalidate every existing GitHub URL. Internal references like `cd /path/to/scamguard-ai` in `lib/README.md` stay correct.
+- **Historical `RELEASE_NOTES.md` sections (v0.1.32 and earlier)** — past releases shipped under "ScamGuard AI" and the release notes are an accurate historical record.
+- **localStorage key `scamguard-intro-lang`** in `docs/main.js` — preserved to keep visitor language preference across the rename.
+- **Detection logic, override rules, schema, storage format, manifest permissions** — zero behavioral change. Same code as v0.1.32 with a different name.
+
+## ⏭ What comes next
+
+Tracked in #6 (Chrome Web Store submission readiness):
+
+- Static PNG icons + visual identity work (the runtime-generated shield needs to become uploaded image assets for store listing)
+- Privacy policy document
+- Removal of `owa_scan.js` / `owa_banner.css` (currently dead code that may concern store reviewers)
+- README tone shift away from "experimental / proof-of-concept" framing
+- Final trademark clearance for `WINDSHOCK` (classes 9 + 42)
+
+---
+
 # ScamGuard AI v0.1.32 Release Notes
 
 This release closes three regressions discovered while validating v0.1.31 against the known phishing corpus, and adds a structural guard against a silent false-negative class in the `O1-whois` ownership override.
