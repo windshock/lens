@@ -297,6 +297,10 @@ async function ensureSession() {
       initialPrompts: [{ role: "system", content: SYS }],
       temperature: 0,
       topK: 1,
+      // Chrome 138+ 는 outputLanguage 미지정 시 콘솔 경고 + safety attestation
+      // 요구. prompt() 마다 동일 값을 다시 넘기고 있지만 session-level 에서도
+      // 명시해 둔다. 지원 코드: [en, es, ja].
+      outputLanguage: "en",
       monitor(m) {
         m.addEventListener("downloadprogress", e => {
           _availability = "downloading";

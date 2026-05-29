@@ -429,7 +429,13 @@
 
   globalThis.setLang = async function (lang) {
     _lang = lang === "ko" ? "ko" : "en";
-    await chrome.storage.local.set({ lang: _lang });
+    // GitHub Pages 같은 비-확장 컨텍스트에서는 chrome.storage 가 없다.
+    // 이 경우 메모리에만 반영하고 영속화는 건너뛴다 (페이지 새로고침 시 초기화).
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage?.local) {
+        await chrome.storage.local.set({ lang: _lang });
+      }
+    } catch { /* non-extension context */ }
   };
 
   globalThis.getLang = function () { return _lang; };

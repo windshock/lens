@@ -329,6 +329,10 @@
     const status = $("download-status");
     try {
       const session = await self.LanguageModel.create({
+        // 진단 페이지는 모델로 어떤 출력도 생성하지 않지만, Chrome 138+ 는 create() 호출에
+        // outputLanguage 미지정 시 콘솔 경고 + safety attestation 요구. 영어로 고정해
+        // 경고 제거. 지원 코드: [en, es, ja].
+        outputLanguage: "en",
         monitor(m) {
           m.addEventListener("downloadprogress", (e) => {
             const pct = Math.round((e.loaded / (e.total || 1)) * 100);
