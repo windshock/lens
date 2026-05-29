@@ -14,8 +14,8 @@
   },
   "ko": {
     "scene1": "오늘날 피싱 방어는 URL 평판 목록에 의존합니다. 누군가 신고한 것만 차단하죠. 영시간 피싱은 어떤 목록에도 없습니다.",
-    "scene2": "Windshock Lens 는 페이지 자체를 읽습니다. DOM, OCR, 온디바이스 Gemini Nano, 결정론적 룰. 차단 목록이 아닙니다.",
-    "scene3": "workers.dev 의 가짜 Microsoft 로그인. 로컬에서 사칭을 감지하고, 클릭 전에 차단합니다.",
-    "scene4": "100 퍼센트 온디바이스. 오픈소스. windshock 닷 github 닷 io 슬래시 lens 에서 받으세요."
+    "scene2": "Windshock Lens 는 페이지 자체를 읽습니다. 차단 목록이 아닌 페이지 분석.",
+    "scene3": "workers.dev 의 가짜 Microsoft 로그인. 로컬에서 클릭 전에 차단합니다.",
+    "scene4": "온디바이스. 오픈소스. 지금 사용해 보세요."
   }
 }

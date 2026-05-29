@@ -98,12 +98,38 @@ tools/promo/
   `af_bella`, `af_nicole`, `am_michael`, `bm_george`. Kokoro v1.0 ships English
   voices only (Korean is not yet supported upstream).
 
-- KO narration falls back to macOS `say` (Yuna voice) via the older
-  `scripts/generate-audio.sh ko` path. Quality is noticeably synthetic compared
-  to Kokoro EN. To upgrade KO, swap to an external TTS — OpenAI TTS API
-  (`nova` or `shimmer`), ElevenLabs, or a recorded VO. As long as the output
-  files keep the names `public/audio/scene{N}-ko.mp3`, the Remotion composition
-  picks them up automatically — no code change needed.
+- KO narration uses **MeloTTS** (open-source, supports Korean directly).
+  Setup (one-time):
+
+  ```bash
+  ./scripts/setup-melotts-kr.sh
+  ```
+
+  The setup script creates `.venv-melotts-kr` against Python 3.11, installs
+  only the KR-runtime subset of MeloTTS deps (skips `mecab-python3` to avoid
+  the macOS case-insensitive filesystem collision with `python-mecab-ko`),
+  patches MeloTTS's eager imports to lazy so the KR path doesn't pull the
+  Japanese MeCab branch, and patches the deprecated S3 model URL to the
+  current Hugging Face download endpoint.
+
+  Generate / regenerate:
+
+  ```bash
+  SPEED=1.4 ./scripts/tts-melotts-kr.sh
+  ```
+
+  Korean speech rate at MeloTTS default is slower than English — `SPEED=1.4`
+  brings clips inside scene budgets without sounding rushed. The script
+  reports actual duration per clip; trim text in `script.json` or bump SPEED
+  if any overruns.
+
+- If you prefer external TTS for either language (ElevenLabs / OpenAI / VO
+  recording), keep the output filenames `public/audio/scene{N}-{en,ko}.mp3`
+  and Remotion will pick them up automatically — no code change required.
+
+- `scripts/generate-audio.sh` remains for macOS `say`-based fallback
+  (Samantha / Yuna). It is no longer the primary path but is useful when
+  Kokoro / MeloTTS venvs are not available.
 
 - `.venv-kokoro/` is gitignored (large model weights + torch). `npm install` and
   the Python setup above must run once on each machine.
