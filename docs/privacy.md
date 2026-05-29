@@ -63,7 +63,6 @@ All extension storage is local to your browser profile (`chrome.storage.local` a
 | `phishingDenylist` | `chrome.storage.local` (persistent) | Array of SHA-256 hashes of hosts that scored ≥7 phishing in past scans | Subsequent visits to a confirmed phishing host short-circuit to a warning without re-running the LLM. Hashed so the raw host list is not directly readable |
 | `allowlistHosts` | `chrome.storage.local` (persistent) | Plaintext hostnames the user explicitly allowed via the warning page | Lets the user bypass future warnings for hosts they trust |
 | `lang` | `chrome.storage.local` (persistent) | `"en"` or `"ko"` | UI language preference |
-| `notifIcons` | `chrome.storage.local` (persistent) | Data URLs of generated notification icons | Avoid re-rendering on every notification |
 | `v:<sha256(url)>` | `chrome.storage.session` (session-only) | Last verdict for that URL | Avoid re-scanning the same URL within a session |
 | `lastVerdict` | `chrome.storage.session` (session-only) | The most recent verdict | Powers the popup detail view |
 | `rdap:<domain>`, `cert:<host>` | `chrome.storage.session` (session-only) | Cached RDAP / CT responses | Avoid re-querying within a session |

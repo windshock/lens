@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en" data-i18n-doctitle="compat.title">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="이 PC가 Chrome 내장 AI(Gemini Nano)를 지원하는지 자동 진단합니다. Windshock Lens 확장이 작동하지 않을 때 원인을 좁히세요.">
+  <meta name="description" content="Check whether this PC supports Chrome's built-in Gemini Nano. Diagnoses why the Windshock Lens extension may report 'model unavailable'.">
   <meta name="robots" content="noindex">
-  <title>Built-in AI 호환성 진단 — Windshock Lens</title>
+  <title>Built-in AI Compatibility Check — Windshock Lens</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111827'/%3E%3Cpath d='M32 10 16 16v13c0 12 7 20 16 25 9-5 16-13 16-25V16L32 10Z' fill='%23fff'/%3E%3Cpath d='M25 26h14v6H25zm0 10h9v6h-9z' fill='%23175cd3'/%3E%3C/svg%3E">
   <style>
     :root {
@@ -39,7 +39,11 @@
       padding: 24px 16px 64px;
     }
     main { max-width: 760px; margin: 0 auto; }
-    h1 { font-size: 22px; margin: 0 0 4px; }
+    .top-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+    h1 { font-size: 22px; margin: 0; }
+    .lang { font-size: 12px; color: var(--muted); }
+    .lang a { color: var(--accent); text-decoration: none; cursor: pointer; }
+    .lang a.active { color: var(--fg); font-weight: 600; cursor: default; text-decoration: none; }
     .sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
     .card {
       background: var(--card);
@@ -109,44 +113,50 @@
 </head>
 <body>
   <main>
-    <h1>Built-in AI 호환성 진단</h1>
-    <p class="sub">이 PC 가 Chrome 내장 Gemini Nano 를 지원하는지 자동 확인합니다. Windshock Lens 확장이 "모델 사용 불가" 로 뜰 때 원인 좁히기에 사용하세요.</p>
+    <div class="top-row">
+      <h1 data-i18n="compat.heading">Built-in AI Compatibility Check</h1>
+      <span class="lang">
+        <a id="lang-en" class="active">EN</a>
+        <span> | </span>
+        <a id="lang-ko">한국어</a>
+      </span>
+    </div>
+    <p class="sub" data-i18n="compat.sub">Automatically checks whether this PC supports Chrome's built-in Gemini Nano. Use this when the Windshock Lens extension reports "model unavailable" to narrow down the cause.</p>
 
     <section class="card">
       <div id="verdict" class="verdict">
         <span class="dot dot-running"></span>
-        <span id="verdict-label">진단 중…</span>
+        <span id="verdict-label" data-i18n="compat.verdict.running">Running checks…</span>
       </div>
-      <p id="verdict-sub" class="verdict-sub">브라우저 API 와 하드웨어 정보를 점검 중입니다.</p>
+      <p id="verdict-sub" class="verdict-sub" data-i18n="compat.verdict.sub.running">Probing browser APIs and hardware info.</p>
       <div id="download-controls" hidden>
-        <button id="download-btn">모델 다운로드 시작</button>
+        <button id="download-btn" data-i18n="compat.downloadBtn">Start model download</button>
         <div class="progress" hidden><div class="progress-bar"></div></div>
         <p class="verdict-sub" id="download-status"></p>
       </div>
     </section>
 
     <section class="card">
-      <h2>점검 결과</h2>
+      <h2 data-i18n="compat.sectionChecks">Check results</h2>
       <table>
         <tbody id="checks"></tbody>
       </table>
     </section>
 
     <section class="card" id="next-steps-card" hidden>
-      <h2>다음 단계</h2>
+      <h2 data-i18n="compat.sectionNext">Next steps</h2>
       <ul class="next-steps" id="next-steps"></ul>
     </section>
 
     <section class="card">
-      <h2>원시 데이터 (지원팀 공유용)</h2>
+      <h2 data-i18n="compat.sectionRaw">Raw data (for support)</h2>
       <pre class="raw" id="raw"></pre>
     </section>
 
-    <footer>
-      <a href="./">Windshock Lens</a> · 진단 정보는 페이지를 떠나지 않습니다 (네트워크 전송 없음).
-    </footer>
+    <footer id="footer"></footer>
   </main>
 
+  <script src="i18n.js"></script>
   <script src="compat-check.js" defer></script>
 </body>
 </html>

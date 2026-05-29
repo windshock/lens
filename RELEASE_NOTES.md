@@ -1,3 +1,46 @@
+# Windshock Lens v0.2.3 Release Notes
+
+## 🌐 Compatibility check page is now bilingual (EN / KO)
+
+The v0.2.2 `compat-check.html` shipped Korean-only by mistake — every other UI surface (`popup.html`, `warning.html`, `verdict.html`) follows the project's "English default + Korean toggle" rule from FR-022, and the new page didn't. v0.2.3 brings it in line.
+
+- All static text moved into `data-i18n` attributes that `applyI18nDom()` populates from `i18n.js`.
+- All dynamic strings emitted by the probes (`addCheck`, `setVerdict`, `nextSteps`, the download progress messages) now store i18n keys + args and translate at render time. Switching language re-renders without restarting probes.
+- A new `compat.*` key namespace in `i18n.js` covers every visible string in both English and Korean.
+- A standard `EN | 한국어` toggle is added at the top of the page, matching the popup pattern. The current selection persists via `chrome.storage.local.lang` like the rest of the extension.
+- The page now defaults to English (matching the rest of the project).
+
+`docs/` mirrors `i18n.js` and the updated `compat-check.html` / `compat-check.js` so the GitHub Pages copy at `https://windshock.github.io/lens/compat-check.html` behaves the same.
+
+## 🖼 Icon generation no longer throws on startup
+
+The service worker logged this on every install and cold start:
+
+```
+icon generation failed: Error: The imageData property must contain an ImageData object
+  or dictionary of ImageData objects.
+    at regenerateIcons (background.js:1693:27)
+```
+
+### What broke
+`regenerateIcons` asked `offscreen.js` to render `ImageData` for the action icon via `OffscreenCanvas` and shipped it back through `chrome.runtime.sendMessage`. Structured cloning across that message boundary downgrades the `ImageData` instance to a plain `{data, width, height}` object; `chrome.action.setIcon({imageData})` then refuses it. The catch block swallowed the throw, but the same throw also short-circuited the second half of the function that was supposed to write `notifIcons` data URLs into `chrome.storage.local`. So notification icons silently fell back to the 1×1 transparent PNG `FALLBACK_NOTIF_ICON`.
+
+### Why it doesn't need to be fixed in place
+v0.2.1 added static PNG icons under `icons/` and wired them into `manifest.json` (`action.default_icon` + top-level `icons`). The action toolbar icon has been served from those statics since v0.2.1 — the runtime regeneration was redundant for that surface. Notification icons were the only consumer of the dynamic path, and `icons/notif-{ok,warn,danger}-128.png` are likewise bundled.
+
+### Fix
+- `notify()` now reads notification icons directly via `chrome.runtime.getURL("icons/notif-{severity}-128.png")` instead of looking them up in `chrome.storage.local.notifIcons`.
+- `regenerateIcons()` is removed entirely; the `chrome.runtime.onInstalled` and `chrome.runtime.onStartup` listeners no longer call it.
+- `offscreen.js#GENERATE_ICONS` handler is left in place for backward compatibility but is no longer invoked by the service worker.
+- `chrome.storage.local.notifIcons` is no longer written or read. Existing installations keep whatever stale value they have; it costs no read or write going forward.
+
+### Spec sync (SDD)
+- `docs/development-spec.md` Section 5.2 marks `GENERATE_ICONS` as legacy/unused with a note on what replaced it.
+- Section 9 marks `notifIcons` as legacy/unused with the same rationale.
+- `docs/privacy.md` storage table drops the `notifIcons` row since it is no longer written.
+
+---
+
 # Windshock Lens v0.2.2 Release Notes
 
 ## 🩺 Built-in AI compatibility check page

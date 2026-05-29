@@ -92,7 +92,7 @@ flowchart TD
 | `OCR` | 이미지 URL/data URL OCR, 이미지당 200자/총 800자 제한 |
 | `WHOIS_PARSE` | yesnic HTML에서 7개 WHOIS 필드 압축 |
 | `PARSE_STATIC_HTML` | OWA 백그라운드 스캔용 정적 HTML 파싱 |
-| `GENERATE_ICONS` | 액션/알림 아이콘 런타임 생성 |
+| `GENERATE_ICONS` | (legacy, 미사용) 과거 액션/알림 아이콘 런타임 생성용. v0.2.2 부터 SW 가 호출하지 않음 — manifest 의 `default_icon` 정적 PNG (`icons/action-*.png`) 와 `notify()` 의 `chrome.runtime.getURL("icons/notif-{severity}-128.png")` 직접 참조로 대체. offscreen 핸들러는 호환을 위해 남겨둠 |
 
 ### 5.3 Verdict schema
 
@@ -179,7 +179,7 @@ flowchart TD
 | `chrome.storage.local` | `phishingDenylist` | host sha256 배열 |
 | `chrome.storage.local` | `allowlistHosts` | 사용자 허용 host 배열 |
 | `chrome.storage.local` | `lang` | `en` 또는 `ko` |
-| `chrome.storage.local` | `notifIcons` | 런타임 생성 알림 아이콘 data URL |
+| `chrome.storage.local` | `notifIcons` | (legacy, v0.2.2 부터 미사용) 과거 런타임 생성 알림 아이콘 data URL. 알림 아이콘은 manifest 와 함께 번들된 `icons/notif-{ok,warn,danger}-128.png` 를 `chrome.runtime.getURL` 로 직접 참조. 기존 설치본의 키는 read 되지 않으며 별도 cleanup 없이 자연 만료 |
 
 ## 10. 개발 워크플로우
 

@@ -1133,8 +1133,17 @@ async function notify(severity, title, body, verdictId) {
     warn:   t("notif.prefixWarn"),
     danger: t("notif.prefixDanger")
   };
-  const { notifIcons = {} } = await chrome.storage.local.get("notifIcons");
-  const iconUrl = notifIcons[severity] || FALLBACK_NOTIF_ICON;
+  // 알림 아이콘은 manifest 와 함께 번들된 static PNG 를 직접 사용한다.
+  // 과거 offscreen.js#generateIcons 로 런타임 생성한 data URL 을 storage.local.notifIcons
+  // 에 저장해 쓰던 경로는 OffscreenCanvas/ImageData 가 chrome.runtime 메시지의 구조화 복제
+  // 과정에서 깨지면서 setIcon 이 실패하던 회귀가 있었고 (v0.2.1 정적 PNG 도입 이후), 정적
+  // 아이콘이 있는 한 그 경로 자체가 불필요하다. storage 의 notifIcons 도 더 이상 읽지 않는다.
+  const staticIcon = {
+    ok:     "icons/notif-ok-128.png",
+    warn:   "icons/notif-warn-128.png",
+    danger: "icons/notif-danger-128.png"
+  }[severity];
+  const iconUrl = staticIcon ? chrome.runtime.getURL(staticIcon) : FALLBACK_NOTIF_ICON;
   await chrome.notifications.create(verdictId || `v_${Date.now()}`, {
     type: "basic",
     iconUrl,
@@ -1685,21 +1694,10 @@ async function dispatchResult(source, url, verdict, meta) {
 // ───────────────────────── 트리거 핸들러 ─────────────────────────
 
 // A. 컨텍스트 메뉴
-async function regenerateIcons() {
-  try {
-    const icons = await sendToOffscreen({ type: "GENERATE_ICONS" });
-    if (!icons) return;
-    if (icons.action) {
-      await chrome.action.setIcon({ imageData: icons.action });
-    }
-    if (icons.dataUrls) {
-      await chrome.storage.local.set({ notifIcons: icons.dataUrls });
-    }
-    console.log("icons generated:", Object.keys(icons.action || {}));
-  } catch (e) {
-    console.warn("icon generation failed:", e);
-  }
-}
+// (regenerateIcons 제거됨 — v0.2.1 정적 PNG 도입 후 manifest 의 default_icon + icons/notif-*.png
+//  를 직접 쓰면 충분. 과거 runtime OffscreenCanvas 경로는 ImageData 가 chrome.runtime 메시지의
+//  구조화 복제에서 깨져 setIcon 이 거부하던 회귀가 있었고, notification 도 static PNG 로 직접
+//  서빙하면서 storage.local.notifIcons 도 더 이상 필요 없다.)
 
 chrome.runtime.onInstalled.addListener(async () => {
   try {
@@ -1709,18 +1707,9 @@ chrome.runtime.onInstalled.addListener(async () => {
       contexts: ["link"]
     });
   } catch (e) { /* duplicate */ }
-  await regenerateIcons();
   await updateBadge();
 });
 chrome.runtime.onStartup.addListener(async () => {
-  // 콜드 스타트 시 storage.local의 아이콘이 살아있는지 점검 — 없으면 재생성
-  const { notifIcons } = await chrome.storage.local.get("notifIcons");
-  if (!notifIcons || !notifIcons.ok) {
-    await regenerateIcons();
-  } else {
-    // 액션 아이콘은 setIcon 호출이 SW 세션마다 필요할 수 있음
-    await regenerateIcons();
-  }
   await updateBadge();
 });
 

@@ -1,13 +1,10 @@
 (async () => {
   const $ = (id) => document.getElementById(id);
+  // 각 체크는 i18n key 와 args 로 저장 — 언어 전환 시 t() 가 재변환하도록.
   const checks = [];
   const nextSteps = [];
   const raw = {};
-
-  function addCheck(name, status, detail) {
-    // status: "ok" | "warn" | "bad" | "unknown"
-    checks.push({ name, status, detail });
-  }
+  let finalVerdict = null; // { status, labelKey, subKey, subArgs }
 
   function el(tag, attrs = {}, ...children) {
     const node = document.createElement(tag);
@@ -23,7 +20,8 @@
     return node;
   }
 
-  // 하드코딩 텍스트 안의 <code>…</code> 만 안전하게 element 로 파싱. innerHTML 미사용.
+  // 하드코딩 i18n 결과 안의 <code>…</code> 만 안전하게 element 로 파싱.
+  // 입력 텍스트는 author-controlled (i18n.js STRINGS 만). innerHTML 미사용.
   function parseInlineCode(text) {
     const parts = [];
     const re = /<code>([^<]*)<\/code>/g;
@@ -37,6 +35,30 @@
     return parts.length ? parts : [text];
   }
 
+  function addCheck(nameKey, status, detailKey, ...detailArgs) {
+    checks.push({ nameKey, status, detailKey, detailArgs });
+  }
+  function addNext(key, ...args) {
+    nextSteps.push({ key, args });
+  }
+  function setVerdictData(status, labelKey, subKey, ...subArgs) {
+    finalVerdict = { status, labelKey, subKey, subArgs };
+  }
+
+  function renderVerdict() {
+    const dotClass = { ok: "dot-ok", warn: "dot-warn", bad: "dot-bad", unknown: "dot-unknown", running: "dot-running" };
+    const dot = $("verdict").querySelector(".dot");
+    if (!finalVerdict) {
+      dot.className = "dot dot-running";
+      $("verdict-label").textContent = t("compat.verdict.running");
+      $("verdict-sub").textContent = t("compat.verdict.sub.running");
+      return;
+    }
+    dot.className = "dot " + dotClass[finalVerdict.status];
+    $("verdict-label").textContent = t(finalVerdict.labelKey);
+    $("verdict-sub").textContent = t(finalVerdict.subKey, ...finalVerdict.subArgs);
+  }
+
   function renderChecks() {
     const tbody = $("checks");
     while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
@@ -45,19 +67,22 @@
     for (const c of checks) {
       tbody.appendChild(el("tr", {},
         el("td", {}, el("span", { class: "dot " + dotClass[c.status], title: icon[c.status] })),
-        el("td", {}, el("span", { class: "req-name" }, c.name)),
-        el("td", {}, el("span", { class: "req-detail" }, c.detail))
+        el("td", {}, el("span", { class: "req-name" }, t(c.nameKey))),
+        el("td", {}, el("span", { class: "req-detail" }, t(c.detailKey, ...c.detailArgs)))
       ));
     }
   }
 
   function renderNextSteps() {
-    if (nextSteps.length === 0) return;
+    if (nextSteps.length === 0) {
+      $("next-steps-card").hidden = true;
+      return;
+    }
     $("next-steps-card").hidden = false;
     const ul = $("next-steps");
     while (ul.firstChild) ul.removeChild(ul.firstChild);
     for (const s of nextSteps) {
-      ul.appendChild(el("li", {}, ...parseInlineCode(s)));
+      ul.appendChild(el("li", {}, ...parseInlineCode(t(s.key, ...s.args))));
     }
   }
 
@@ -65,20 +90,57 @@
     $("raw").textContent = JSON.stringify(raw, null, 2);
   }
 
-  function setVerdict(status, label, sub) {
-    const dot = $("verdict").querySelector(".dot");
-    dot.className = "dot " + ({ ok: "dot-ok", warn: "dot-warn", bad: "dot-bad", unknown: "dot-unknown", running: "dot-running" }[status]);
-    $("verdict-label").textContent = label;
-    $("verdict-sub").textContent = sub;
+  function renderFooter() {
+    const footer = $("footer");
+    while (footer.firstChild) footer.removeChild(footer.firstChild);
+    // t("compat.footer") 는 "{0} · ..." 형태. {0} 자리에 anchor 를 끼우기 위해
+    // 텍스트를 둘로 쪼개서 안전하게 element 로 조립한다.
+    const tpl = t("compat.footer", "__BRAND__");
+    const parts = tpl.split("__BRAND__");
+    if (parts[0]) footer.appendChild(document.createTextNode(parts[0]));
+    footer.appendChild(el("a", { href: "./" }, "Windshock Lens"));
+    if (parts[1]) footer.appendChild(document.createTextNode(parts[1]));
   }
+
+  function renderAll() {
+    applyI18nDom(document);
+    document.title = t("compat.title");
+    renderVerdict();
+    renderChecks();
+    renderNextSteps();
+    renderRaw();
+    renderFooter();
+  }
+
+  function refreshLangActive() {
+    const lang = (typeof getLang === "function") ? getLang() : "en";
+    $("lang-en").classList.toggle("active", lang === "en");
+    $("lang-ko").classList.toggle("active", lang === "ko");
+  }
+
+  async function switchLang(lang) {
+    await setLang(lang);
+    refreshLangActive();
+    renderAll();
+  }
+
+  // ── 초기화 ─────────────────────────────────────
+  await initI18n();
+  refreshLangActive();
+  applyI18nDom(document);
+  document.title = t("compat.title");
+  renderFooter();
+
+  $("lang-en").addEventListener("click", () => switchLang("en"));
+  $("lang-ko").addEventListener("click", () => switchLang("ko"));
 
   // ── 1. API 존재 확인 ─────────────────────────────
   const hasAPI = typeof self.LanguageModel !== "undefined" && typeof self.LanguageModel.availability === "function";
   raw.hasLanguageModelAPI = hasAPI;
   if (hasAPI) {
-    addCheck("LanguageModel API", "ok", "self.LanguageModel.availability() 호출 가능.");
+    addCheck("compat.check.api", "ok", "compat.check.api.ok");
   } else {
-    addCheck("LanguageModel API", "bad", "self.LanguageModel 이 정의되지 않음 — Chrome 138+ 가 아니거나 플래그가 꺼져 있을 수 있음.");
+    addCheck("compat.check.api", "bad", "compat.check.api.bad");
   }
 
   // ── 2. UA / OS / Chrome 버전 ─────────────────────
@@ -107,65 +169,66 @@
   }
 
   if (chromeMajor >= 138) {
-    addCheck("Chrome 138+", "ok", `현재 버전: ${chromeMajor}`);
+    addCheck("compat.check.chrome", "ok", "compat.check.chrome.ok", chromeMajor);
   } else if (chromeMajor > 0) {
-    addCheck("Chrome 138+", "bad", `현재 버전: ${chromeMajor} — Chrome 138 이상으로 업데이트 필요.`);
-    nextSteps.push('Chrome 을 최신 stable 로 업데이트하세요: <code>chrome://settings/help</code>');
+    addCheck("compat.check.chrome", "bad", "compat.check.chrome.bad", chromeMajor);
+    addNext("compat.next.chrome");
   } else {
-    addCheck("Chrome 138+", "unknown", "Chrome 버전을 식별할 수 없음. 다른 브라우저(Edge/Brave 등)일 수 있습니다.");
+    addCheck("compat.check.chrome", "unknown", "compat.check.chrome.unknown");
   }
 
   if (isMobile === true) {
-    addCheck("데스크톱 OS", "bad", "모바일 기기로 식별됨 — 모바일 Chrome 은 Built-in AI 비지원.");
-    nextSteps.push("Windows / macOS / Linux 데스크톱 또는 Chromebook Plus 에서 실행하세요.");
+    addCheck("compat.check.mobile", "bad", "compat.check.mobile.bad");
+    addNext("compat.next.desktop");
   } else if (osPlatform) {
     const platformOk = /^(Windows|macOS|Linux|Chrome OS)$/i.test(osPlatform);
     const macOk = osPlatform === "macOS" && osVersion && parseInt(osVersion.split(".")[0], 10) >= 13;
     const macFail = osPlatform === "macOS" && osVersion && parseInt(osVersion.split(".")[0], 10) < 13;
+    const display = osPlatform + (osVersion ? " " + osVersion : "");
     if (macFail) {
-      addCheck("OS 요건", "bad", `macOS ${osVersion} — macOS 13 (Ventura) 이상이 필요합니다.`);
-      nextSteps.push("macOS 를 13 (Ventura) 이상으로 업그레이드하세요.");
+      addCheck("compat.check.os", "bad", "compat.check.os.macFail", osVersion);
+      addNext("compat.next.macos");
     } else if (macOk) {
-      addCheck("OS 요건", "ok", `${osPlatform} ${osVersion}`);
+      addCheck("compat.check.os", "ok", "compat.check.os.ok", display);
     } else if (platformOk) {
-      addCheck("OS 요건", "ok", `${osPlatform}${osVersion ? " " + osVersion : ""}`);
+      addCheck("compat.check.os", "ok", "compat.check.os.ok", display);
     } else {
-      addCheck("OS 요건", "warn", `${osPlatform} — 지원 OS 목록(Win/macOS/Linux/ChromeOS) 확인 필요.`);
+      addCheck("compat.check.os", "warn", "compat.check.os.warn", osPlatform);
     }
   } else {
-    addCheck("OS 요건", "unknown", "OS 정보를 읽을 수 없음.");
+    addCheck("compat.check.os", "unknown", "compat.check.os.unknown");
   }
 
   // ── 3. CPU 코어 ─────────────────────────────────
   const cores = navigator.hardwareConcurrency || 0;
   raw.hardwareConcurrency = cores;
   if (cores >= 4) {
-    addCheck("CPU 코어 ≥ 4", "ok", `${cores} 코어`);
+    addCheck("compat.check.cores", "ok", "compat.check.cores.ok", cores);
   } else if (cores > 0) {
-    addCheck("CPU 코어 ≥ 4", "bad", `${cores} 코어 — CPU 모드는 4코어 이상 필요.`);
+    addCheck("compat.check.cores", "bad", "compat.check.cores.bad", cores);
   } else {
-    addCheck("CPU 코어 ≥ 4", "unknown", "코어 수를 읽을 수 없음.");
+    addCheck("compat.check.cores", "unknown", "compat.check.cores.unknown");
   }
 
   // ── 4. RAM (deviceMemory, 16GB+ 는 8 로 클램프됨) ──
   const mem = navigator.deviceMemory || 0;
   raw.deviceMemory = mem;
   if (mem >= 8) {
-    addCheck("RAM (대략)", "ok", `${mem}GB 이상 (deviceMemory API 는 16GB+ 도 8 로 보고 — privacy clamp).`);
+    addCheck("compat.check.ram", "ok", "compat.check.ram.ok", mem);
   } else if (mem > 0) {
-    addCheck("RAM (대략)", "warn", `${mem}GB 보고됨 — CPU 모드는 16GB 권장. GPU 모드면 무관.`);
+    addCheck("compat.check.ram", "warn", "compat.check.ram.warn", mem);
   } else {
-    addCheck("RAM (대략)", "unknown", "deviceMemory 미보고.");
+    addCheck("compat.check.ram", "unknown", "compat.check.ram.unknown");
   }
 
   // ── 5. Save Data ───────────────────────────────
   const saveData = !!(navigator.connection && navigator.connection.saveData);
   raw.saveData = saveData;
   if (saveData) {
-    addCheck("Save Data 비활성", "bad", "Save Data 가 켜져 있음 — 대용량 모델 다운로드 차단.");
-    nextSteps.push("Chrome 설정 → 성능 → Data Saver 를 끄거나, 네트워크 설정에서 비종량제로 분류하세요.");
+    addCheck("compat.check.saveData", "bad", "compat.check.saveData.bad");
+    addNext("compat.next.saveData");
   } else {
-    addCheck("Save Data 비활성", "ok", "Save Data 꺼짐.");
+    addCheck("compat.check.saveData", "ok", "compat.check.saveData.ok");
   }
 
   // ── 6. WebGPU adapter (휴리스틱, VRAM 직접 못 봄) ──
@@ -174,7 +237,7 @@
     if (navigator.gpu?.requestAdapter) {
       const adapter = await navigator.gpu.requestAdapter();
       if (adapter) {
-        // requestAdapterInfo 가 deprecate 되었고 adapter.info 가 신규.
+        // requestAdapterInfo 는 deprecate, adapter.info 가 신규.
         gpuInfo = adapter.info || (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : null);
         raw.gpu = gpuInfo ? { vendor: gpuInfo.vendor, architecture: gpuInfo.architecture, device: gpuInfo.device, description: gpuInfo.description } : null;
       }
@@ -186,17 +249,17 @@
     const vendor = (gpuInfo.vendor || "").toLowerCase();
     const arch = (gpuInfo.architecture || "").toLowerCase();
     const desc = (gpuInfo.description || "").toLowerCase();
-    // 통합 GPU 키워드 — VRAM 4GB 미달 가능성 높음
+    const summary = vendor + " " + (arch || desc || "(limited info)");
     const looksIntegrated = /intel.*(uhd|iris)|amd.*radeon (vega|graphics)|apple gpu/i.test(`${vendor} ${arch} ${desc}`);
     if (looksIntegrated) {
-      addCheck("GPU VRAM > 4GB (추정)", "warn", `통합 GPU 로 추정 (${vendor} ${arch || desc}) — VRAM 4GB 미달 가능. 실제 사양은 OS 도구로 확인 필요.`);
+      addCheck("compat.check.gpu", "warn", "compat.check.gpu.integrated", summary);
     } else {
-      addCheck("GPU VRAM > 4GB (추정)", "unknown", `WebGPU 어댑터: ${vendor} ${arch || desc || "(정보 제한)"} — VRAM 은 직접 노출되지 않음.`);
+      addCheck("compat.check.gpu", "unknown", "compat.check.gpu.unknown", summary);
     }
   } else if (navigator.gpu) {
-    addCheck("GPU VRAM > 4GB (추정)", "unknown", "WebGPU 어댑터를 얻을 수 없음.");
+    addCheck("compat.check.gpu", "unknown", "compat.check.gpu.noAdapter");
   } else {
-    addCheck("GPU VRAM > 4GB (추정)", "warn", "WebGPU 미지원 — GPU 모드 사용 불가, CPU 모드 (16GB RAM + 4코어) 필요.");
+    addCheck("compat.check.gpu", "warn", "compat.check.gpu.unsupported");
   }
 
   // ── 7. 디스크 (origin quota 만 — 실제 free 공간 아님) ──
@@ -206,21 +269,19 @@
       raw.storageEstimate = { quota: est.quota, usage: est.usage };
       const quotaGB = est.quota / (1024 ** 3);
       if (quotaGB >= 22) {
-        addCheck("디스크 22GB+ (간접)", "ok", `브라우저 quota: ${quotaGB.toFixed(0)}GB — 실제 디스크 free 공간은 OS 도구로 확인 필요.`);
+        addCheck("compat.check.disk", "ok", "compat.check.disk.ok", quotaGB.toFixed(0));
       } else if (quotaGB > 0) {
-        addCheck("디스크 22GB+ (간접)", "warn", `브라우저 quota: ${quotaGB.toFixed(1)}GB — 22GB 미달. 디스크가 거의 차있을 가능성.`);
-        nextSteps.push("디스크 여유 공간 22GB+ 가 필요합니다. Chrome 프로필이 있는 볼륨 기준으로 확인하세요.");
+        addCheck("compat.check.disk", "warn", "compat.check.disk.warn", quotaGB.toFixed(1));
+        addNext("compat.next.disk");
       } else {
-        addCheck("디스크 22GB+ (간접)", "unknown", "quota 정보 미보고.");
+        addCheck("compat.check.disk", "unknown", "compat.check.disk.unknownEmpty");
       }
     } else {
-      addCheck("디스크 22GB+ (간접)", "unknown", "navigator.storage.estimate 미지원.");
+      addCheck("compat.check.disk", "unknown", "compat.check.disk.unsupported");
     }
   } catch (e) {
-    addCheck("디스크 22GB+ (간접)", "unknown", "추정 실패: " + String(e));
+    addCheck("compat.check.disk", "unknown", "compat.check.disk.failed", String(e));
   }
-
-  renderChecks();
 
   // ── 8. LanguageModel.availability() ─────────────
   let availability = "unavailable";
@@ -234,36 +295,35 @@
   raw.availability = availability;
 
   if (!hasAPI) {
-    setVerdict("bad", "API 미지원", "이 브라우저에는 LanguageModel API 가 없습니다. Chrome 138+ stable 로 업데이트하세요.");
+    setVerdictData("bad", "compat.verdict.noApi", "compat.verdict.noApi.sub");
   } else if (availability === "available") {
-    setVerdict("ok", "사용 가능", "Gemini Nano 가 이 PC 에 설치되어 있고 즉시 사용 가능합니다.");
+    setVerdictData("ok", "compat.verdict.available", "compat.verdict.available.sub");
   } else if (availability === "downloading") {
-    setVerdict("warn", "다운로드 중", "Chrome 이 백그라운드에서 모델을 받고 있습니다. 1~2GB, 수십분 걸릴 수 있어요. chrome://on-device-internals 에서 진행률 확인.");
+    setVerdictData("warn", "compat.verdict.downloading", "compat.verdict.downloading.sub");
   } else if (availability === "downloadable") {
-    setVerdict("warn", "조건 충족 — 다운로드 필요", "하드웨어 조건은 만족합니다. 아래 버튼으로 다운로드를 시작할 수 있습니다.");
+    setVerdictData("warn", "compat.verdict.downloadable", "compat.verdict.downloadable.sub");
     $("download-controls").hidden = false;
   } else {
-    // unavailable
     const bads = checks.filter(c => c.status === "bad");
     if (bads.length > 0) {
-      setVerdict("bad", "사용 불가", `다음 요건이 미달입니다: ${bads.map(b => b.name).join(", ")}.`);
+      const badNames = bads.map(b => t(b.nameKey)).join(", ");
+      setVerdictData("bad", "compat.verdict.unavail", "compat.verdict.unavail.sub", badNames);
     } else {
-      setVerdict("bad", "사용 불가 — 원인 불명확", "탐지 가능한 HW/SW 요건은 통과했습니다. 아래 '다음 단계' 의 비공개 원인(엔터프라이즈 정책 / 디스크 free / VRAM 등)을 확인하세요.");
-      nextSteps.push('Chrome 의 정확한 모델 상태: <code>chrome://on-device-internals</code> (last download error 까지 표시)');
-      nextSteps.push('엔터프라이즈 정책 차단 여부: <code>chrome://policy</code> 에서 <code>GenAILocalFoundationalModelSettings</code> 또는 <code>OptimizationGuideOnDeviceModelEnabled</code> 확인');
-      nextSteps.push("실제 디스크 free 공간 22GB+ 확인 (Finder 정보 / 작업 관리자 / df -h).");
-      nextSteps.push("GPU VRAM 4GB+ 확인 (Windows: 작업 관리자 → 성능 → GPU / macOS: 활성 상태 보기 / chrome://gpu).");
+      setVerdictData("bad", "compat.verdict.unclear", "compat.verdict.unclear.sub");
+      addNext("compat.next.internals");
+      addNext("compat.next.policy");
+      addNext("compat.next.diskFree");
+      addNext("compat.next.vram");
     }
   }
 
-  renderNextSteps();
-  renderRaw();
+  renderAll();
 
   // ── 9. 다운로드 트리거 ──────────────────────────
   $("download-btn").addEventListener("click", async () => {
     const btn = $("download-btn");
     btn.disabled = true;
-    btn.textContent = "다운로드 시작 중…";
+    btn.textContent = t("compat.downloading");
     $("download-controls").querySelector(".progress").hidden = false;
     const bar = $("download-controls").querySelector(".progress-bar");
     const status = $("download-status");
@@ -273,20 +333,22 @@
           m.addEventListener("downloadprogress", (e) => {
             const pct = Math.round((e.loaded / (e.total || 1)) * 100);
             bar.style.width = pct + "%";
-            status.textContent = `${pct}% (${(e.loaded / (1024 ** 2)).toFixed(0)} / ${((e.total || 0) / (1024 ** 2)).toFixed(0)} MB)`;
+            const loaded = (e.loaded / (1024 ** 2)).toFixed(0);
+            const total = ((e.total || 0) / (1024 ** 2)).toFixed(0);
+            status.textContent = t("compat.downloadProgress", pct, loaded, total);
           });
         }
       });
-      status.textContent = "다운로드 완료. 세션 생성 성공.";
+      status.textContent = t("compat.downloadDone");
       bar.style.width = "100%";
-      btn.textContent = "완료 — 페이지 새로고침";
+      btn.textContent = t("compat.downloadFinishedBtn");
       btn.disabled = false;
       btn.onclick = () => location.reload();
       try { session.destroy?.(); } catch {}
     } catch (e) {
-      status.textContent = "다운로드 실패: " + String(e?.message || e);
+      status.textContent = t("compat.downloadFailed", String(e?.message || e));
       btn.disabled = false;
-      btn.textContent = "재시도";
+      btn.textContent = t("compat.downloadRetry");
     }
   });
 })();
