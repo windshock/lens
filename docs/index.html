@@ -268,19 +268,19 @@
     <section id="roadmap" class="split-section final-section">
       <div>
         <p class="eyebrow" data-i18n="roadmapEyebrow">Status and roadmap</p>
-        <h2 data-i18n="roadmapTitle">Experimental proof of concept</h2>
+        <h2 data-i18n="roadmapTitle">Roadmap</h2>
       </div>
       <div class="split-copy">
         <p data-i18n="roadmapBody">
-          Windshock Lens is intended for security research, pilot testing, and defensive evaluation. It is not yet an enterprise-managed security product.
+          Windshock Lens targets the gray-zone phishing that Chrome Safe Browsing tends to miss. The list below tracks what is already in production and what is still open.
         </p>
         <ul class="roadmap-list">
-          <li data-i18n="roadmapItem1">Add hard-evidence precheck before LLM analysis.</li>
-          <li data-i18n="roadmapItem2">Expand phishing-kit markers for webhook and messaging-platform exfiltration patterns.</li>
-          <li data-i18n="roadmapItem3">Design privacy-first endpoint-only network observation.</li>
-          <li data-i18n="roadmapItem4">Review web-accessible resources and conservative safe-domain behavior.</li>
+          <li data-i18n="roadmapItem1">Shipped: Hard-evidence precheck before LLM analysis (v0.1.29).</li>
+          <li data-i18n="roadmapItem2">Shipped: Phishing-kit signature markers including Telegram and Discord exfiltration patterns.</li>
+          <li data-i18n="roadmapItem3">Shipped: Single-flight scan deduplication and a Built-in AI compatibility diagnostic page for team rollout (v0.2.3).</li>
+          <li data-i18n="roadmapItem4">Open: Privacy-first endpoint metadata observation (URL and header level only, no page body content). Chrome Web Store submission is tracked separately in issue #6.</li>
         </ul>
-        <a class="text-link" href="https://github.com/windshock/lens/issues/2" data-i18n="roadmapLink">Track technical improvement issue #2</a>
+        <a class="text-link" href="https://github.com/windshock/lens/issues/6" data-i18n="roadmapLink">Track Chrome Web Store launch (issue #6)</a>
       </div>
     </section>
   </main>
