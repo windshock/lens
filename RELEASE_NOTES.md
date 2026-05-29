@@ -1,3 +1,32 @@
+# Windshock Lens v0.2.2 Release Notes
+
+## 🩺 Built-in AI compatibility check page
+
+Some team members reported the extension showing "On-device model unavailable" without any further hint about what hardware/software requirement was missing. `chrome://on-device-internals` gives the truth but isn't friendly for a non-technical teammate.
+
+### New diagnostic page
+A self-contained HTML page at `compat-check.html` (also published at `https://windshock.github.io/lens/compat-check.html`) runs a battery of probes the moment it loads and explains the result in plain language. It checks:
+
+- `LanguageModel.availability()` — the authoritative status from Chrome.
+- Chrome major version (≥ 138) via `navigator.userAgentData.getHighEntropyValues()`.
+- OS family + version (Windows / macOS 13+ / Linux / ChromeOS), and mobile detection.
+- `navigator.hardwareConcurrency` (≥ 4) and `navigator.deviceMemory` (≥ 8 GB, with a note about Chrome's privacy clamp at 8 for any 16 GB+ machine).
+- `navigator.connection.saveData` (must be off; Data Saver blocks the model download).
+- Heuristics that **cannot** be measured directly from a web page: GPU VRAM (WebGPU adapter info exposes vendor/architecture but not VRAM, so an integrated GPU is flagged as a *probable* failure) and disk space (only the origin's storage quota is visible, not real disk free space).
+
+If the result is `"downloadable"`, the page exposes a button that calls `LanguageModel.create()` with a `downloadprogress` monitor, so a teammate can kick off the download from the same page rather than having to find a separate trigger.
+
+If the result is `"unavailable"` and *no* deterministic check failed, the page lists the things a web page genuinely cannot probe — enterprise policies (`GenAILocalFoundationalModelSettings`, `OptimizationGuideOnDeviceModelEnabled`), actual disk free space, real VRAM — with the exact `chrome://` URLs to check.
+
+The page emits no network traffic. A "Raw data (for support)" block at the bottom dumps the collected signals so a teammate can copy-paste them when reporting an issue.
+
+### Popup integration
+The popup now shows a "Why is the model unavailable? (run diagnostic)" link directly beneath the status row whenever availability is `unavailable`, or when `downloadable`/`downloading` reports an error. The link opens the diagnostic page in a new tab via `chrome.runtime.getURL("compat-check.html")`, so it works offline once the extension is installed.
+
+`compat-check.html` is added to `web_accessible_resources` in `manifest.json`. The same file is also mirrored to `docs/compat-check.html` so the GitHub Pages site can serve it without requiring users to install the extension first. The page's logic lives in `compat-check.js` (loaded via external `<script src>`) — extension pages enforce a strict Content Security Policy that disallows inline scripts, and using an external file is the supported path. The diagnostic page makes no network requests and stays self-contained.
+
+---
+
 # Windshock Lens v0.2.1 Release Notes
 
 Store-readiness release. No detection logic changes from v0.2.0. Everything in this release prepares the extension for Chrome Web Store submission and renames the GitHub repository to match the product brand.

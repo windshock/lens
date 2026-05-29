@@ -24,6 +24,9 @@ function showStatus(status) {
   const availability = state.availability;
   latestAvailability = availability;
   const el = $("status");
+  const diag = $("diagLink");
+  // 진단 링크는 unavailable / 또는 model setup error 케이스에서만 노출.
+  let showDiag = false;
   if (availability === "available") {
     el.className = "status ok";
     el.textContent = t("popup.statusOk");
@@ -35,6 +38,7 @@ function showStatus(status) {
       el.textContent = t("popup.statusError", String(state.error));
       $("scan").disabled = false;
       $("scan").textContent = t("popup.btnRetry");
+      showDiag = true;
     } else {
       const phase = state.preparing || availability === "downloading" ? t("popup.statusDl") : t("popup.statusDlPrep");
       el.textContent = `${phase}${progressText(state.progress)}…`;
@@ -46,7 +50,9 @@ function showStatus(status) {
     el.textContent = t("popup.statusUnavailable");
     $("scan").disabled = true;
     $("scan").textContent = t("popup.btnScan");
+    showDiag = true;
   }
+  if (diag) diag.hidden = !showDiag;
 }
 
 async function refreshStatus() {
@@ -168,6 +174,11 @@ async function init() {
 
   $("lang-en").addEventListener("click", () => switchLang("en"));
   $("lang-ko").addEventListener("click", () => switchLang("ko"));
+
+  $("diagLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL("compat-check.html") });
+  });
 
   const status = await refreshStatus();
   prepareModelIfNeeded(status).catch(e => {

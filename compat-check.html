@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="이 PC가 Chrome 내장 AI(Gemini Nano)를 지원하는지 자동 진단합니다. Windshock Lens 확장이 작동하지 않을 때 원인을 좁히세요.">
+  <meta name="robots" content="noindex">
+  <title>Built-in AI 호환성 진단 — Windshock Lens</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23111827'/%3E%3Cpath d='M32 10 16 16v13c0 12 7 20 16 25 9-5 16-13 16-25V16L32 10Z' fill='%23fff'/%3E%3Cpath d='M25 26h14v6H25zm0 10h9v6h-9z' fill='%23175cd3'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f8fafc;
+      --fg: #111827;
+      --muted: #6b7280;
+      --card: #ffffff;
+      --border: #e5e7eb;
+      --ok: #16a34a;
+      --warn: #d97706;
+      --bad: #dc2626;
+      --unknown: #6b7280;
+      --accent: #175cd3;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1220;
+        --fg: #e5e7eb;
+        --muted: #9ca3af;
+        --card: #111827;
+        --border: #1f2937;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      padding: 24px 16px 64px;
+    }
+    main { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin: 0 0 16px;
+    }
+    .verdict {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .verdict-sub { color: var(--muted); margin: 6px 0 0; font-size: 13px; }
+    .dot {
+      width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+    }
+    .dot-ok { background: var(--ok); }
+    .dot-warn { background: var(--warn); }
+    .dot-bad { background: var(--bad); }
+    .dot-unknown { background: var(--unknown); }
+    .dot-running {
+      background: var(--accent);
+      animation: pulse 1s ease-in-out infinite alternate;
+    }
+    @keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
+    h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 10px 0; border-top: 1px solid var(--border); vertical-align: top; }
+    tr:first-child td { border-top: none; }
+    td:first-child { width: 18px; padding-right: 12px; }
+    td:nth-child(2) { font-weight: 600; width: 38%; }
+    td:nth-child(3) { color: var(--muted); font-size: 13px; }
+    .req-name { color: var(--fg); display: block; }
+    .req-detail { color: var(--muted); font-size: 12px; margin-top: 2px; display: block; }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 16px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .progress {
+      height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 8px;
+    }
+    .progress-bar {
+      height: 100%; background: var(--accent); width: 0%; transition: width 0.3s;
+    }
+    code, kbd {
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .next-steps li { margin-bottom: 8px; }
+    .next-steps a { color: var(--accent); }
+    footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
+    .raw { white-space: pre-wrap; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Built-in AI 호환성 진단</h1>
+    <p class="sub">이 PC 가 Chrome 내장 Gemini Nano 를 지원하는지 자동 확인합니다. Windshock Lens 확장이 "모델 사용 불가" 로 뜰 때 원인 좁히기에 사용하세요.</p>
+
+    <section class="card">
+      <div id="verdict" class="verdict">
+        <span class="dot dot-running"></span>
+        <span id="verdict-label">진단 중…</span>
+      </div>
+      <p id="verdict-sub" class="verdict-sub">브라우저 API 와 하드웨어 정보를 점검 중입니다.</p>
+      <div id="download-controls" hidden>
+        <button id="download-btn">모델 다운로드 시작</button>
+        <div class="progress" hidden><div class="progress-bar"></div></div>
+        <p class="verdict-sub" id="download-status"></p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>점검 결과</h2>
+      <table>
+        <tbody id="checks"></tbody>
+      </table>
+    </section>
+
+    <section class="card" id="next-steps-card" hidden>
+      <h2>다음 단계</h2>
+      <ul class="next-steps" id="next-steps"></ul>
+    </section>
+
+    <section class="card">
+      <h2>원시 데이터 (지원팀 공유용)</h2>
+      <pre class="raw" id="raw"></pre>
+    </section>
+
+    <footer>
+      <a href="./">Windshock Lens</a> · 진단 정보는 페이지를 떠나지 않습니다 (네트워크 전송 없음).
+    </footer>
+  </main>
+
+  <script src="compat-check.js" defer></script>
+</body>
+</html>
