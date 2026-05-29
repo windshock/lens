@@ -1,0 +1,13 @@
+{
+  "name": "windshock-lens-tools",
+  "private": true,
+  "type": "module",
+  "description": "Local development scripts (screenshot capture, etc.). Not shipped with the extension.",
+  "scripts": {
+    "screenshots": "node capture_screenshots.mjs",
+    "screenshots:ko": "LANG_OVERRIDE=ko node capture_screenshots.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^23.0.0"
+  }
+}
