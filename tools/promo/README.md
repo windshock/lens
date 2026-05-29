@@ -77,14 +77,36 @@ tools/promo/
 ## Notes
 
 - `node_modules/` and `dist/promo-*.mp4` are in the root `.gitignore`.
-- Narration uses macOS `say` (`Samantha` EN / `Yuna` KO). Re-generate with
-  `./scripts/generate-audio.sh [en|ko]`. Generator reports actual mp3 duration
-  per scene — if any exceeds its budget (visible after the per-scene line) the
-  text in `public/audio/script.json` should be trimmed or `SAY_RATE_EN/KO`
-  bumped. Output goes to `public/audio/scene{N}-{en,ko}.mp3`.
-- To swap to a higher-quality TTS (ElevenLabs / OpenAI), produce the same
-  output filenames (`public/audio/scene{N}-{en,ko}.mp3`) and the Remotion
-  composition picks them up automatically — no code change needed.
+- EN narration uses **Kokoro-82M** (open-source local TTS, near-human quality).
+  Setup (one-time):
+
+  ```bash
+  brew install espeak-ng
+  python3.12 -m venv .venv-kokoro
+  .venv-kokoro/bin/pip install kokoro soundfile
+  ```
+
+  Generate / regenerate:
+
+  ```bash
+  .venv-kokoro/bin/python scripts/tts-kokoro.py --speed 1.1
+  ```
+
+  The script reports each clip's duration vs scene budget. If a clip exceeds
+  budget, raise `--speed` (1.1–1.2) or shorten the text in
+  `public/audio/script.json`. Default voice is `af_heart`; alternates include
+  `af_bella`, `af_nicole`, `am_michael`, `bm_george`. Kokoro v1.0 ships English
+  voices only (Korean is not yet supported upstream).
+
+- KO narration falls back to macOS `say` (Yuna voice) via the older
+  `scripts/generate-audio.sh ko` path. Quality is noticeably synthetic compared
+  to Kokoro EN. To upgrade KO, swap to an external TTS — OpenAI TTS API
+  (`nova` or `shimmer`), ElevenLabs, or a recorded VO. As long as the output
+  files keep the names `public/audio/scene{N}-ko.mp3`, the Remotion composition
+  picks them up automatically — no code change needed.
+
+- `.venv-kokoro/` is gitignored (large model weights + torch). `npm install` and
+  the Python setup above must run once on each machine.
 - Korean glyph rendering depends on the system having a Korean font (macOS does
   by default — `Apple SD Gothic Neo`). For server-side rendering on a different
   host, embed a Korean web font in `src/index.jsx` via Remotion's font loading
