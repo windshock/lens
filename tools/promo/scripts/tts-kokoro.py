@@ -7,7 +7,10 @@ public/audio/scene{N}-en.mp3 (one per scene). Each clip's actual duration is
 reported so it can be compared to its scene budget in src/PromoVideo.jsx.
 
 Usage:
-    .venv-kokoro/bin/python scripts/tts-kokoro.py [--voice <voice>] [--speed <s>]
+    ~/Downloads/tts/.venv-kokoro/bin/python scripts/tts-kokoro.py [--voice <voice>] [--speed <s>]
+
+Setup (one-time, shared across all projects on this machine):
+    ~/Downloads/tts/scripts/setup-kokoro.sh
 
 Options:
     --voice    Kokoro voice id (default: af_heart)
@@ -15,7 +18,9 @@ Options:
     --speed    Speech speed multiplier (default: 1.0; promo videos work well at 1.05–1.1)
 
 Kokoro is loaded once and reused across scenes. M-series Mac generates each
-clip in well under 1 sec, so the whole batch finishes in a few seconds.
+clip in well under 1 sec, so the whole batch finishes in a few seconds. For
+single-text use from any other project, the shared CLI is simpler:
+    ~/Downloads/tts/kokoro "text" out.mp3 [--voice af_heart] [--speed 1.0]
 """
 
 from __future__ import annotations

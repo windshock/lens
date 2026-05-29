@@ -5,28 +5,31 @@
 # Reads public/audio/script.json's .ko.* entries and writes scene{N}-ko.mp3 next
 # to the EN files.
 #
-# Setup:
-#   ./scripts/setup-melotts-kr.sh        # one-time, creates .venv-melotts-kr
+# Setup (one-time, shared across all projects on this machine):
+#   ~/Downloads/tts/scripts/setup-melotts-kr.sh
 #
 # Usage:
 #   ./scripts/tts-melotts-kr.sh                  # default speed 1.0
-#   SPEED=1.1 ./scripts/tts-melotts-kr.sh        # tighter pacing if a clip overruns
+#   SPEED=1.4 ./scripts/tts-melotts-kr.sh        # MeloTTS KR speaks slowly; bump speed
 #
 # Per-clip duration is reported so you can compare to the scene budget in
 # src/PromoVideo.jsx (10 / 8 / 7 / 5 sec). If a clip exceeds its budget, raise
 # SPEED or shorten the .ko.<scene> text in script.json.
+#
+# For single-text use from any other project, the shared CLI is simpler:
+#   ~/Downloads/tts/melotts-kr "한국어 텍스트" out.mp3 [--speed 1.3]
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-MELO="./.venv-melotts-kr/bin/melo"
+MELO="${HOME}/Downloads/tts/.venv-melotts-kr/bin/melo"
 SCRIPT_JSON="public/audio/script.json"
 OUT_DIR="public/audio"
 SPEED="${SPEED:-1.0}"
 
 if [ ! -x "$MELO" ]; then
-  echo "MeloTTS not installed. Run ./scripts/setup-melotts-kr.sh first." >&2
+  echo "MeloTTS not installed. Run: ~/Downloads/tts/scripts/setup-melotts-kr.sh" >&2
   exit 1
 fi
 

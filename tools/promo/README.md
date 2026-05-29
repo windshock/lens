@@ -77,51 +77,40 @@ tools/promo/
 ## Notes
 
 - `node_modules/` and `dist/promo-*.mp4` are in the root `.gitignore`.
-- EN narration uses **Kokoro-82M** (open-source local TTS, near-human quality).
+- Narration uses the shared TTS toolbox at `~/Downloads/tts/` — set up once,
+  reuse across any project on this machine. See `~/Downloads/tts/README.md`
+  for the full overview and voice options.
+
   Setup (one-time):
 
   ```bash
-  brew install espeak-ng
-  python3.12 -m venv .venv-kokoro
-  .venv-kokoro/bin/pip install kokoro soundfile
+  brew install espeak-ng mecab mecab-ipadic
+  ~/Downloads/tts/scripts/setup-kokoro.sh        # English (Kokoro-82M)
+  ~/Downloads/tts/scripts/setup-melotts-kr.sh    # Korean (MeloTTS, patched)
   ```
 
-  Generate / regenerate:
+  Generate / regenerate (from `tools/promo/`):
 
   ```bash
-  .venv-kokoro/bin/python scripts/tts-kokoro.py --speed 1.1
+  ~/Downloads/tts/.venv-kokoro/bin/python scripts/tts-kokoro.py --speed 1.1   # EN
+  SPEED=1.4 ./scripts/tts-melotts-kr.sh                                       # KR
   ```
 
-  The script reports each clip's duration vs scene budget. If a clip exceeds
-  budget, raise `--speed` (1.1–1.2) or shorten the text in
-  `public/audio/script.json`. Default voice is `af_heart`; alternates include
-  `af_bella`, `af_nicole`, `am_michael`, `bm_george`. Kokoro v1.0 ships English
-  voices only (Korean is not yet supported upstream).
+  Both scripts report per-clip duration vs the scene budget. If a clip
+  overruns, raise `--speed` / `SPEED` or shorten the matching text in
+  `public/audio/script.json`.
 
-- KO narration uses **MeloTTS** (open-source, supports Korean directly).
-  Setup (one-time):
+- **Korean-with-English-words gotcha.** MeloTTS KR mispronounces English brand
+  names and acronyms. Transliterate to Hangul **only in `public/audio/script.json`'s
+  `.ko.*` entries** — the visual subtitle (`i18n.js` KO strings) keeps the
+  original English to preserve brand recognition. Examples:
 
-  ```bash
-  ./scripts/setup-melotts-kr.sh
-  ```
-
-  The setup script creates `.venv-melotts-kr` against Python 3.11, installs
-  only the KR-runtime subset of MeloTTS deps (skips `mecab-python3` to avoid
-  the macOS case-insensitive filesystem collision with `python-mecab-ko`),
-  patches MeloTTS's eager imports to lazy so the KR path doesn't pull the
-  Japanese MeCab branch, and patches the deprecated S3 model URL to the
-  current Hugging Face download endpoint.
-
-  Generate / regenerate:
-
-  ```bash
-  SPEED=1.4 ./scripts/tts-melotts-kr.sh
-  ```
-
-  Korean speech rate at MeloTTS default is slower than English — `SPEED=1.4`
-  brings clips inside scene budgets without sounding rushed. The script
-  reports actual duration per clip; trim text in `script.json` or bump SPEED
-  if any overruns.
+  | Audio (Hangul) | Visual (English) |
+  |---|---|
+  | 윈드쇼크 렌즈 | Windshock Lens |
+  | 마이크로소프트 | Microsoft |
+  | 유알엘 | URL |
+  | 워커스 닷 데브 | workers.dev |
 
 - If you prefer external TTS for either language (ElevenLabs / OpenAI / VO
   recording), keep the output filenames `public/audio/scene{N}-{en,ko}.mp3`
@@ -129,7 +118,7 @@ tools/promo/
 
 - `scripts/generate-audio.sh` remains for macOS `say`-based fallback
   (Samantha / Yuna). It is no longer the primary path but is useful when
-  Kokoro / MeloTTS venvs are not available.
+  the shared `~/Downloads/tts/` venvs are not available.
 
 - `.venv-kokoro/` is gitignored (large model weights + torch). `npm install` and
   the Python setup above must run once on each machine.
