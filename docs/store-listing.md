@@ -299,6 +299,126 @@ https://github.com/windshock/lens/blob/main/docs/privacy.md
 
 ---
 
+## Chrome Web Store dashboard — Privacy form (English copy)
+
+Same fields, English copy. Use whichever language matches your developer-dashboard locale. All fields within the 1,000-char limit.
+
+### Single purpose description
+
+```
+Windshock Lens evaluates whether the URL the user is about to navigate to (or has just navigated to) is a phishing or scam page, entirely inside Chrome. The evaluation runs through the on-device Gemini Nano LLM and a set of deterministic security rules (brand-to-domain mismatch, dangerous URI schemes, clipboard shell payloads, auto-downloads, phishing-kit fingerprints). Page content is never sent to an external LLM API. Every permission and feature in the extension exists to support this single phishing-classification task.
+```
+
+### contextMenus justification
+
+```
+Registers a single right-click context menu entry, "Scan this link for phishing", on link targets. When the user clicks it, the extension runs a phishing scan on that specific URL. No other context menu items are added.
+```
+
+### tabs justification
+
+```
+Used in two parts of the scan flow: (1) opens an inactive hidden tab to extract the target URL's DOM, then closes it as soon as extraction completes; (2) on a confirmed phishing verdict, switches the user's active tab to the warning page (warning.html) so the user does not interact with the malicious page. The extension does not read content from unrelated tabs or modify other tabs without user intent, and uses this permission only for its single phishing-classification purpose.
+```
+
+### scripting justification
+
+```
+Injects only the extension's own statically-bundled scripts (content_extract.js, clipboard_hook.js) into pages. No remote-code download, no eval(), no dynamic import, no fetch-then-execute. Injection is scoped to the page being scanned. Used solely to collect DOM, form, and clipboard signals that feed the phishing classifier — nothing else.
+```
+
+### storage justification
+
+```
+Persists the following in chrome.storage local to the user's profile: (a) SHA-256 hashes of hosts confirmed as phishing (denylist); (b) hostnames the user has explicitly allowed via the warning page (allowlist); (c) the user's UI language choice (en/ko); (d) session-scoped verdict / RDAP / CT caches. None of this is transmitted to any external server. The user can clear all of it, or just a specific host, from the popup's reset buttons at any time.
+```
+
+### notifications justification
+
+```
+Shows a system notification with the safe / warn / danger verdict when a scan completes. The danger level uses requireInteraction so the user notices it. If the toolbar popup is already open, the notification is suppressed to avoid duplicate UI. Notification text contains only the phishing-classification result (score, brand, reason).
+```
+
+### offscreen justification
+
+```
+Two scan-time tasks cannot run inside the service worker because they need DOM APIs: (1) Tesseract.js OCR (the WASM and language data are statically bundled with the extension — no network fetch) of images on the scanned page; (2) DOMParser parsing of WHOIS HTML responses to extract domain-ownership fields. The offscreen document is created on demand for these tasks and is not used for any purpose outside the single phishing-classification flow.
+```
+
+### downloads justification
+
+```
+When a phishing-hosted page auto-triggers an executable download (.exe / .dmg / .msi / etc.), downloads.onCreated pauses the download immediately, scans the hosting page (referrer), and on a confirmed phishing verdict cancels the download and erases the partial file. On a safe verdict the download silently resumes. Downloads the user initiates from legitimate pages are not interfered with, and download metadata is never transmitted externally.
+```
+
+### activeTab justification
+
+```
+The popup's "Scan this page" button reads the current active tab's URL on the user's explicit click. The extension does not access the active tab without user action, and uses this permission only as the trigger entry point of the single phishing-classification purpose.
+```
+
+### bookmarks justification
+
+```
+The O5-SAFE deterministic override treats hosts the user has bookmarked as "user-trusted" to reduce false positives on sites the user already considers legitimate. Read-only — bookmarks are never added, modified, or deleted. Bookmark contents are never transmitted, and this signal is used only as a trust input to the single phishing-classification purpose.
+```
+
+### history justification
+
+```
+The O5-SAFE deterministic override treats hosts the user has frequently visited as "user-trusted" to reduce false positives. Read-only — history is never modified or transmitted. Used only as a trust signal for the single phishing-classification purpose.
+```
+
+### topSites justification
+
+```
+The O5-SAFE deterministic override uses Chrome's top-sites list as an additional trust signal. Read-only, never transmitted. Used solely as input to the phishing-classification trust evaluation.
+```
+
+### Host permission justification (`<all_urls>`)
+
+```
+Phishing pages appear on arbitrary HTTPS hosts — free-hosting platforms (workers.dev, pages.dev, firebaseapp.com, vercel.app) plus any other domain — so host permissions cannot be narrowed to a fixed match pattern. Host permission is used in two places: (1) the click-guard content script (click_guard.js) runs on every http(s) page so it can intercept dangerous-URI-scheme clicks (for example applescript:// ClickFix variants) before execution; (2) the scanUrl flow fetches and extracts the DOM of the URL being scanned. Extraction is scoped to active scans and does not silently fetch arbitrary pages in the background. Content scripts and fetches are never used for anything outside the single phishing-classification purpose.
+```
+
+### Remote code use
+
+Select `No, I am not using remote code.`
+
+Justification (for reference, if the form asks):
+
+```
+The extension does not fetch, eval, dynamically import, or load external <script> tags for any JS or Wasm at runtime. The Tesseract.js OCR library and its eng / kor traineddata language models are statically bundled inside the extension package (lib/README.md documents the exact file list). background.js runs only as the manifest's service_worker. Zero external code dependencies at runtime.
+```
+
+### User data collected
+
+Check these three categories — all marked "processed locally only, never transmitted":
+
+- ☑ **Web history** — `chrome.history` read access powers the O5-SAFE override (treats hosts in your history as more trustworthy). Never transmitted.
+- ☑ **User activity** — At scan time, the URL and page-content extraction of the target page are used as input to the local LLM and deterministic rules. Never transmitted.
+- ☑ **Website content** — DOM, forms, links, image sources, clipboard writes, and visible text from the scanned page are used as scan input. Never transmitted.
+
+Leave unchecked (not collected or processed):
+
+- ☐ Personally identifiable information / ☐ Health information / ☐ Financial and payment information / ☐ Authentication information / ☐ Personal communications / ☐ Location
+
+### Three disclosures (all checked, all true)
+
+- ☑ I do not sell or transfer user data to third parties, except in the approved use cases (N/A — no third-party transfer happens at all).
+- ☑ I do not use or transfer user data for purposes unrelated to my item's single purpose.
+- ☑ I do not use or transfer user data to determine creditworthiness or for lending purposes.
+
+### Privacy policy URL
+
+```
+https://github.com/windshock/lens/blob/main/docs/privacy.md
+```
+
+(If a hosted-HTML version is preferred over a GitHub blob view, `https://windshock.github.io/lens/privacy.md` serves the same content as raw markdown. The GitHub blob view above renders the markdown with anchors and a navigation, so it is the better URL for reviewers.)
+
+---
+
 ## Submission checklist (Chrome Web Store dashboard)
 
 - [ ] Developer account created (\$5 + identity verification)
