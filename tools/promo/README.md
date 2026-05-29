@@ -77,8 +77,14 @@ tools/promo/
 ## Notes
 
 - `node_modules/` and `dist/promo-*.mp4` are in the root `.gitignore`.
-- No audio track yet — text overlays carry the story. To add narration, drop an
-  MP3 in `src/audio/` and use Remotion's `<Audio>` primitive inside `PromoVideo.jsx`.
+- Narration uses macOS `say` (`Samantha` EN / `Yuna` KO). Re-generate with
+  `./scripts/generate-audio.sh [en|ko]`. Generator reports actual mp3 duration
+  per scene — if any exceeds its budget (visible after the per-scene line) the
+  text in `public/audio/script.json` should be trimmed or `SAY_RATE_EN/KO`
+  bumped. Output goes to `public/audio/scene{N}-{en,ko}.mp3`.
+- To swap to a higher-quality TTS (ElevenLabs / OpenAI), produce the same
+  output filenames (`public/audio/scene{N}-{en,ko}.mp3`) and the Remotion
+  composition picks them up automatically — no code change needed.
 - Korean glyph rendering depends on the system having a Korean font (macOS does
   by default — `Apple SD Gothic Neo`). For server-side rendering on a different
   host, embed a Korean web font in `src/index.jsx` via Remotion's font loading
