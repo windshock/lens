@@ -1,0 +1,20 @@
+{
+  "name": "windshock-lens-promo-video",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Remotion-based Chrome Web Store / YouTube promo video for Windshock Lens.",
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.jsx",
+    "render:en": "remotion render src/index.jsx PromoEN ../../dist/promo-en.mp4 --props='{\"lang\":\"en\"}'",
+    "render:ko": "remotion render src/index.jsx PromoKO ../../dist/promo-ko.mp4 --props='{\"lang\":\"ko\"}'",
+    "render": "npm run render:en && npm run render:ko"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/transitions": "^4.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "remotion": "^4.0.0"
+  }
+}
