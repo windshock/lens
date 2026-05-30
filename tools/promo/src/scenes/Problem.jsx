@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, interpolate, spring, useVideoConfig } from "remotion";
 import { STRINGS } from "../i18n.js";
+import { useScale } from "../scale.js";
 
 const BRAND = {
   bg: "#0b1220",
@@ -20,7 +21,8 @@ const BRAND = {
 export const Problem = ({ lang }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const s = STRINGS[lang];
+  const s = useScale();
+  const str = STRINGS[lang];
 
   const kickerOpacity = interpolate(frame, [0, 25], [0, 1], { extrapolateRight: "clamp" });
 
@@ -28,7 +30,7 @@ export const Problem = ({ lang }) => {
     const k = spring({ frame: frame - startFrame, fps, config: { damping: 20 } });
     return {
       opacity: k,
-      transform: `translateX(${(1 - k) * -40}px)`
+      transform: `translateX(${(1 - k) * -40 * s}px)`
     };
   };
 
@@ -37,32 +39,31 @@ export const Problem = ({ lang }) => {
 
   const gapAt = 210;
   const gapOpacity = interpolate(frame, [gapAt, gapAt + 20], [0, 1], { extrapolateRight: "clamp" });
-  // Fade the existing three layers + common label slightly when gap appears, to direct attention
   const dimAfterGap = interpolate(frame, [gapAt, gapAt + 30], [1, 0.35], { extrapolateRight: "clamp" });
 
   return (
-    <AbsoluteFill style={{ background: BRAND.bg, padding: 80, color: BRAND.fg, fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif" }}>
-      <div style={{ fontSize: 22, color: BRAND.accent, fontWeight: 600, letterSpacing: 1, opacity: kickerOpacity, marginBottom: 28 }}>
-        {s.problem_kicker.toUpperCase()}
+    <AbsoluteFill style={{ background: BRAND.bg, padding: 80 * s, color: BRAND.fg, fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif" }}>
+      <div style={{ fontSize: 22 * s, color: BRAND.accent, fontWeight: 600, letterSpacing: 1, opacity: kickerOpacity, marginBottom: 28 * s }}>
+        {str.problem_kicker.toUpperCase()}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, opacity: dimAfterGap }}>
-        {[s.problem_layer1, s.problem_layer2, s.problem_layer3].map((label, i) => {
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 * s, opacity: dimAfterGap }}>
+        {[str.problem_layer1, str.problem_layer2, str.problem_layer3].map((label, i) => {
           const style = layerEnter(40 + i * 30);
           return (
             <div key={i} style={{
               ...style,
               background: BRAND.card,
-              borderRadius: 12,
-              padding: "18px 24px",
-              fontSize: 30,
+              borderRadius: 12 * s,
+              padding: `${18 * s}px ${24 * s}px`,
+              fontSize: 30 * s,
               fontWeight: 600,
               display: "flex",
               alignItems: "center",
-              gap: 18,
-              width: 720
+              gap: 18 * s,
+              width: 720 * s
             }}>
-              <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: 6, background: BRAND.muted }} />
+              <span style={{ display: "inline-block", width: 12 * s, height: 12 * s, borderRadius: 6 * s, background: BRAND.muted }} />
               {label}
             </div>
           );
@@ -70,21 +71,21 @@ export const Problem = ({ lang }) => {
       </div>
 
       <div style={{
-        marginTop: 28,
-        fontSize: 22,
+        marginTop: 28 * s,
+        fontSize: 22 * s,
         color: BRAND.muted,
         opacity: commonOpacity * dimAfterGap,
         fontStyle: "italic"
       }}>
-        — {s.problem_common}
+        — {str.problem_common}
       </div>
 
-      <div style={{ opacity: gapOpacity, marginTop: 50, borderTop: `1px solid ${BRAND.muted}33`, paddingTop: 28 }}>
-        <div style={{ fontSize: 40, fontWeight: 700, color: BRAND.warn, marginBottom: 12 }}>
-          {s.problem_gap_title}
+      <div style={{ opacity: gapOpacity, marginTop: 50 * s, borderTop: `1px solid ${BRAND.muted}33`, paddingTop: 28 * s }}>
+        <div style={{ fontSize: 40 * s, fontWeight: 700, color: BRAND.warn, marginBottom: 12 * s }}>
+          {str.problem_gap_title}
         </div>
-        <div style={{ fontSize: 22, color: BRAND.muted }}>
-          {s.problem_gap_sub}
+        <div style={{ fontSize: 22 * s, color: BRAND.muted }}>
+          {str.problem_gap_sub}
         </div>
       </div>
     </AbsoluteFill>
