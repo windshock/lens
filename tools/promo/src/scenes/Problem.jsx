@@ -10,81 +10,215 @@ const BRAND = {
   accent: "#1f6feb",
   warn: "#f59e0b",
   danger: "#dc2626",
-  card: "#1e293b"
+  card: "#1e293b",
+  cardBorder: "#334155"
 };
 
+const PHISHING_URL = "microsft-365-signin.workers.dev";
+
+// Three reputation lookups, staggered. Each panel:
+//   appears (spring) at appearAt, runs spinner, then reveals "Not on list" badge at resultAt.
+const PANEL_TIMING = [
+  { layerKey: "problem_layer1", appearAt: 50,  resultAt: 130 },
+  { layerKey: "problem_layer2", appearAt: 80,  resultAt: 160 },
+  { layerKey: "problem_layer3", appearAt: 110, resultAt: 190 },
+];
+
+function ReputationPanel({ name, appearAt, resultAt, frame, fps, s, queryText, notOnListText }) {
+  const appear = spring({ frame: frame - appearAt, fps, config: { damping: 18 } });
+  const opacity = interpolate(appear, [0, 1], [0, 1]);
+  const translateY = interpolate(appear, [0, 1], [24 * s, 0]);
+
+  const showResult = frame >= resultAt;
+  const resultAppear = showResult
+    ? spring({ frame: frame - resultAt, fps, config: { damping: 22 } })
+    : 0;
+  const resultScale = interpolate(resultAppear, [0, 1], [0.85, 1]);
+
+  // 회전하는 spinner ring — result 가 나오기 전까지만.
+  const spinnerAngle = ((frame - appearAt) * 8) % 360;
+  const spinnerOpacity = showResult ? 0 : 1;
+
+  return (
+    <div style={{
+      flex: 1,
+      background: BRAND.card,
+      borderRadius: 14 * s,
+      padding: 22 * s,
+      opacity,
+      transform: `translateY(${translateY}px)`,
+      border: `${2 * s}px solid ${showResult ? BRAND.danger : BRAND.cardBorder}`,
+      transition: "border-color 0.3s ease-out",
+    }}>
+      <div style={{
+        fontSize: 20 * s,
+        fontWeight: 700,
+        color: BRAND.fg,
+        marginBottom: 14 * s,
+      }}>{name}</div>
+      <div style={{
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+        fontSize: 13 * s,
+        color: BRAND.muted,
+        marginBottom: 16 * s,
+        height: 16 * s,
+      }}>{queryText}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 * s, height: 36 * s }}>
+        {/* Spinner */}
+        <div style={{
+          width: 22 * s,
+          height: 22 * s,
+          borderRadius: 11 * s,
+          border: `${3 * s}px solid ${BRAND.cardBorder}`,
+          borderTopColor: BRAND.accent,
+          opacity: spinnerOpacity,
+          transform: `rotate(${spinnerAngle}deg)`,
+          flexShrink: 0,
+        }} />
+        {/* Result badge */}
+        <div style={{
+          opacity: resultAppear,
+          transform: `scale(${resultScale})`,
+          background: BRAND.danger,
+          color: "#fff",
+          padding: `${8 * s}px ${14 * s}px`,
+          borderRadius: 8 * s,
+          fontSize: 16 * s,
+          fontWeight: 700,
+          letterSpacing: 0.3,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6 * s,
+        }}>
+          <span style={{ fontSize: 18 * s, lineHeight: 1 }}>✕</span>
+          {notOnListText}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Scene 1 — Problem (10s @ 30fps = 300 frames)
-//   0-30  : kicker fade in
-//   30-180: three protection layers slide in one by one (30f apart) + settle
-//   180-210: "All depend on URL reputation" callout under the three
-//   210-300: "Zero-hour phishing slips through" — fresh URL appears with clock, gap callout
+//   0-20    : kicker fade in
+//   15-45   : phishing URL bar pops in with "created 2 hours ago"
+//   50-220  : 3 reputation panels appear (50/80/110), each transitions to "Not on list" at 130/160/190
+//   220-300 : "Zero-hour phishing slips through" gap message reveal
 export const Problem = ({ lang }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const s = useScale();
   const str = STRINGS[lang];
 
-  const kickerOpacity = interpolate(frame, [0, 25], [0, 1], { extrapolateRight: "clamp" });
+  const kickerOpacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: "clamp" });
 
-  const layerEnter = (startFrame) => {
-    const k = spring({ frame: frame - startFrame, fps, config: { damping: 20 } });
-    return {
-      opacity: k,
-      transform: `translateX(${(1 - k) * -40 * s}px)`
-    };
-  };
+  const urlAppear = spring({ frame: frame - 15, fps, config: { damping: 16 } });
+  const urlOpacity = interpolate(urlAppear, [0, 1], [0, 1]);
+  const urlScale = interpolate(urlAppear, [0, 1], [0.95, 1]);
 
-  const commonAt = 180;
-  const commonOpacity = interpolate(frame, [commonAt, commonAt + 20], [0, 1], { extrapolateRight: "clamp" });
-
-  const gapAt = 210;
-  const gapOpacity = interpolate(frame, [gapAt, gapAt + 20], [0, 1], { extrapolateRight: "clamp" });
-  const dimAfterGap = interpolate(frame, [gapAt, gapAt + 30], [1, 0.35], { extrapolateRight: "clamp" });
+  const gapAppear = spring({ frame: frame - 220, fps, config: { damping: 16 } });
+  const gapOpacity = interpolate(gapAppear, [0, 1], [0, 1]);
+  const gapY = interpolate(gapAppear, [0, 1], [16 * s, 0]);
 
   return (
-    <AbsoluteFill style={{ background: BRAND.bg, padding: 80 * s, color: BRAND.fg, fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif" }}>
-      <div style={{ fontSize: 22 * s, color: BRAND.accent, fontWeight: 600, letterSpacing: 1, opacity: kickerOpacity, marginBottom: 28 * s }}>
+    <AbsoluteFill style={{
+      background: BRAND.bg,
+      padding: 80 * s,
+      color: BRAND.fg,
+      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+    }}>
+      <div style={{
+        fontSize: 22 * s,
+        color: BRAND.accent,
+        fontWeight: 600,
+        letterSpacing: 1.2,
+        opacity: kickerOpacity,
+        marginBottom: 36 * s,
+      }}>
         {str.problem_kicker.toUpperCase()}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 * s, opacity: dimAfterGap }}>
-        {[str.problem_layer1, str.problem_layer2, str.problem_layer3].map((label, i) => {
-          const style = layerEnter(40 + i * 30);
-          return (
-            <div key={i} style={{
-              ...style,
-              background: BRAND.card,
-              borderRadius: 12 * s,
-              padding: `${18 * s}px ${24 * s}px`,
-              fontSize: 30 * s,
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              gap: 18 * s,
-              width: 720 * s
-            }}>
-              <span style={{ display: "inline-block", width: 12 * s, height: 12 * s, borderRadius: 6 * s, background: BRAND.muted }} />
-              {label}
-            </div>
-          );
-        })}
-      </div>
-
+      {/* Phishing URL bar */}
       <div style={{
-        marginTop: 28 * s,
-        fontSize: 22 * s,
-        color: BRAND.muted,
-        opacity: commonOpacity * dimAfterGap,
-        fontStyle: "italic"
+        opacity: urlOpacity,
+        transform: `scale(${urlScale})`,
+        background: "#1e293b",
+        border: `${2 * s}px solid ${BRAND.danger}55`,
+        borderRadius: 12 * s,
+        padding: `${20 * s}px ${28 * s}px`,
+        display: "flex",
+        alignItems: "center",
+        gap: 18 * s,
+        marginBottom: 40 * s,
       }}>
-        — {str.problem_common}
+        <div style={{
+          width: 14 * s,
+          height: 14 * s,
+          borderRadius: 7 * s,
+          background: BRAND.danger,
+          boxShadow: `0 0 ${12 * s}px ${BRAND.danger}aa`,
+          flexShrink: 0,
+        }} />
+        <div style={{
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          fontSize: 28 * s,
+          fontWeight: 600,
+          color: BRAND.fg,
+          flex: 1,
+          letterSpacing: 0.3,
+        }}>
+          {PHISHING_URL}
+        </div>
+        <div style={{
+          fontSize: 16 * s,
+          color: BRAND.warn,
+          fontWeight: 700,
+          letterSpacing: 0.3,
+          whiteSpace: "nowrap",
+        }}>
+          {str.problem_url_age}
+        </div>
       </div>
 
-      <div style={{ opacity: gapOpacity, marginTop: 50 * s, borderTop: `1px solid ${BRAND.muted}33`, paddingTop: 28 * s }}>
-        <div style={{ fontSize: 40 * s, fontWeight: 700, color: BRAND.warn, marginBottom: 12 * s }}>
+      {/* 3 reputation panels in a row */}
+      <div style={{
+        display: "flex",
+        gap: 16 * s,
+        marginBottom: 36 * s,
+      }}>
+        {PANEL_TIMING.map((p, i) => (
+          <ReputationPanel
+            key={i}
+            name={str[p.layerKey]}
+            appearAt={p.appearAt}
+            resultAt={p.resultAt}
+            frame={frame}
+            fps={fps}
+            s={s}
+            queryText={str.problem_query}
+            notOnListText={str.problem_not_on_list}
+          />
+        ))}
+      </div>
+
+      {/* Zero-hour gap message */}
+      <div style={{
+        opacity: gapOpacity,
+        transform: `translateY(${gapY}px)`,
+        marginTop: "auto",
+      }}>
+        <div style={{
+          fontSize: 42 * s,
+          fontWeight: 800,
+          color: BRAND.warn,
+          marginBottom: 10 * s,
+          letterSpacing: -0.5,
+        }}>
           {str.problem_gap_title}
         </div>
-        <div style={{ fontSize: 22 * s, color: BRAND.muted }}>
+        <div style={{
+          fontSize: 22 * s,
+          color: BRAND.muted,
+        }}>
           {str.problem_gap_sub}
         </div>
       </div>
