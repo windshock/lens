@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, interpolate, spring, useVideoConfig } from "remotion";
 import { STRINGS } from "../i18n.js";
-import { useScale } from "../scale.js";
+import { useScale } from "remotion-kit-lib";
 
 const BRAND = {
   bg: "#0b1220",
