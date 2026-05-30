@@ -1,0 +1,18 @@
+# BGM source
+
+Track:   "Tech Ambient Corporate" (Pixabay ID 156126)
+URL:     https://pixabay.com/music/corporate-tech-ambient-corporate-156126/
+File:    cdn.pixabay.com/download/audio/2023/06/29/audio_6dc0794530.mp3
+License: Pixabay Content License (free for commercial use; no attribution required)
+
+Processing applied:
+- ffmpeg -t 30   (trimmed to first 30 seconds)
+- afade=t=in:st=0:d=2   (2-second fade in)
+- afade=t=out:st=28:d=2   (2-second fade out)
+- libmp3lame -qscale:a 4   (~165 kbps re-encode)
+
+To swap to a different track later:
+1. Pick a 30-second-ready track (Pixabay / YouTube Audio Library / Freesound / etc.).
+2. Replace tools/promo/public/audio/bgm.mp3 — keep the same path so the Remotion
+   composition picks it up automatically.
+3. Re-run `npm run render`.
