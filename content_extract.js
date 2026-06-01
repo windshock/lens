@@ -15,15 +15,56 @@
     const text = (a.innerText || a.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
     return `${a.href} | ${text}`;
   }
-  function serializeFormElement(el) {
+  // 컨트롤의 accessible label 추출: aria-label → aria-labelledby → <label for> →
+  // 감싸는 <label> → 자기 텍스트(button) → title/placeholder 순. 버튼 텍스트/입력 라벨이
+  // 직렬화에 들어가야 LLM 이 "휴대폰 본인인증" 같은 의미를 보고 더미 버튼과 구별한다.
+  function accessibleLabel(el) {
+    let label = (el.getAttribute("aria-label") || "").trim();
+    if (!label && el.getAttribute("aria-labelledby")) {
+      label = el.getAttribute("aria-labelledby").split(/\s+/)
+        .map(id => { const n = document.getElementById(id); return n ? (n.innerText || n.textContent || "") : ""; })
+        .join(" ").trim();
+    }
+    if (!label && el.id) {
+      try {
+        const sel = 'label[for="' + (window.CSS && CSS.escape ? CSS.escape(el.id) : el.id.replace(/"/g, '\\"')) + '"]';
+        const lbl = document.querySelector(sel);
+        if (lbl) label = (lbl.innerText || lbl.textContent || "").trim();
+      } catch {}
+    }
+    if (!label && el.closest) {
+      const wrap = el.closest("label");
+      if (wrap) label = (wrap.innerText || wrap.textContent || "").trim();
+    }
+    if (!label) label = (el.innerText || el.textContent || "").trim();
+    if (!label) label = (el.getAttribute("title") || el.getAttribute("placeholder") || "").trim();
+    return label.replace(/\s+/g, " ").slice(0, 80);
+  }
+
+  function serializeControl(el, label) {
     const tag = el.tagName.toLowerCase();
-    const attrs = ["name", "type", "placeholder", "value", "action", "method", "id", "autocomplete"];
+    const attrs = ["name", "type", "placeholder", "id", "autocomplete", "action", "method"];
     const pairs = attrs
       .map(k => [k, el.getAttribute(k)])
       .filter(([, v]) => v != null && v !== "")
       .map(([k, v]) => `${k}="${String(v).slice(0, 60)}"`);
+    if (label) pairs.push(`label="${label}"`);
     return `<${tag} ${pairs.join(" ")}>`;
   }
+
+  // credential / PII / 제출 관련 컨트롤 라벨. 이 패턴에 맞는 버튼만 FORMS(보안 의미 있는
+  // 입력/제출 표면)로 분류하고, 나머지 라벨 버튼은 UI_CONTROLS 로 분리, 라벨 없는 버튼은 버린다.
+  const CREDENTIAL_CTRL_RE = new RegExp(
+    "(로그\\s?인|로그온|sign\\s?in|log\\s?in|signin|" +
+    "인증|본인\\s?인증|본인\\s?확인|verify|otp|인증\\s?번호|" +
+    "비밀\\s?번호|패스워드|password|passcode|" +
+    "아이디|이메일|email|" +
+    "다음|next|확인|제출|submit|계속|continue|" +
+    "가입|회원\\s?가입|sign\\s?up|register|" +
+    "결제|pay|payment|송금|이체|전송|보내기|" +
+    "휴대폰|전화\\s?번호|생년월일|주민)",
+    "i"
+  );
 
   // ── 시그널 감지: 위험 URI 스킴, 사회공학 텍스트, 다운로드 버튼, copy-button heuristic ──
   const DANGEROUS_URI = /^(applescript|ms-msdt|ms-msvr|ms-search|search-ms|shell|vbscript|jar|chrome|about):/i;
@@ -112,10 +153,36 @@
   // 1) 잡음 태그 제거 제거됨 (사용자 활성 탭에 주입되므로 DOM을 파괴하면 안 됨)
   // document.body.innerText는 원래 script/style 내용을 무시하므로 삭제할 필요가 없습니다.
 
-  // 2) form 직렬화
-  const forms = [...document.querySelectorAll("input,textarea,form,select,button")]
-    .slice(0, 40)
-    .map(serializeFormElement);
+  // 2) form / UI 컨트롤 분류 직렬화
+  //  - FORMS:        실제 데이터 입력/제출 표면 (form/input/textarea/select + credential·PII·submit 버튼)
+  //  - UI_CONTROLS:  라벨 있는 일반 버튼 (네비/팔로우/카테고리 등) — 최대 10, 저신호
+  //  - 라벨 없는 버튼 더미(`<button type="button">`)는 둘 다에서 제외
+  const FORM_CAP = 30, UI_CAP = 10;
+  const forms = [];
+  const uiControls = [];
+  const seenCtrl = new Set();
+  for (const el of document.querySelectorAll("input, textarea, select, form, button, [role='button']")) {
+    if (seenCtrl.has(el)) continue;
+    seenCtrl.add(el);
+    const tag = el.tagName.toLowerCase();
+    const type = (el.getAttribute("type") || "").toLowerCase();
+    // submit input 은 제출 표면이므로 data-entry 로 본다. button/reset/image 만 버튼류로 분리.
+    const isButtonType = tag === "input" && /^(button|reset|image)$/.test(type);
+    const isDataEntry = tag === "form" || tag === "textarea" || tag === "select" ||
+      (tag === "input" && !isButtonType);
+    if (isDataEntry) {
+      if (forms.length < FORM_CAP) forms.push(serializeControl(el, accessibleLabel(el)));
+      continue;
+    }
+    // 여기부터 버튼류 (button / [role=button] / input[type=button|reset|image])
+    const label = accessibleLabel(el);
+    if (!label) continue; // 라벨 없는 더미 버튼 제외
+    if (CREDENTIAL_CTRL_RE.test(label)) {
+      if (forms.length < FORM_CAP) forms.push(serializeControl(el, label));
+    } else if (uiControls.length < UI_CAP) {
+      uiControls.push(serializeControl(el, label));
+    }
+  }
 
   // 3) 앵커 + 위험 URI / 실행 확장자 다운로드 링크 분류
   const seenAnchor = new Set();
@@ -210,6 +277,7 @@
     finalUrl: cleanUrl,
     title: document.title || "",
     forms,
+    uiControls,
     anchors,
     imgs,
     visibleText,

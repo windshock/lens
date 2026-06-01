@@ -58,7 +58,9 @@ const INTERNAL_DOMAINS = ["skplanet.com", "sktelecom.com", "sk.com", "localhost"
 // 모듈 로드 시 소문자 키 Map 한 번 만들어두고, 변형(전체/"AI" 접미 제거/첫 단어) 셋을 케이스 무시로 시도.
 function lookupOfficialDomains(brand) {
   if (!brand) return null;
-  const lc = String(brand).toLowerCase().trim();
+  // LM 이 한글 브랜드를 NFD(분해형)로 출력하면 NFC 키 Map 과 직접 매칭 실패 → silent FN.
+  // 매칭 전 NFC 로 정규화한다. [[lm-output-normalization]]
+  const lc = String(brand).normalize("NFC").toLowerCase().trim();
   if (!lc) return null;
   return OFFICIAL_DOMAINS_LC.get(lc)
     || OFFICIAL_DOMAINS_LC.get(lc.replace(/\s+ai$/i, "").trim())
@@ -159,6 +161,8 @@ const OFFICIAL_DOMAINS = {
   "CGV":          ["cgv.co.kr"],
   "Megabox":      ["megabox.co.kr"],
   "Lotte Cinema": ["lottecinema.co.kr"],
+  "Netflix":      ["netflix.com"],
+  "넷플릭스":      ["netflix.com"],
   "Watcha":       ["watcha.com"],
   "Wavve":        ["wavve.com"],
   "Seezn":        ["seezn.com"],
@@ -171,12 +175,19 @@ const OFFICIAL_DOMAINS = {
 
 // lookupOfficialDomains 가 사용하는 소문자 키 Map — OFFICIAL_DOMAINS 정의 직후 한 번 빌드.
 const OFFICIAL_DOMAINS_LC = new Map(
-  Object.entries(OFFICIAL_DOMAINS).map(([k, v]) => [k.toLowerCase(), v])
+  Object.entries(OFFICIAL_DOMAINS).map(([k, v]) => [k.normalize("NFC").toLowerCase(), v])
 );
 
 // 무료 호스팅 / 단명 서브도메인 / 누구나 임의 콘텐츠 올리는 클라우드 스토리지·CDN.
 // 정식 브랜드 사이트는 이런 곳에 안 박힘 — 브랜드 사칭 발견 + 이 호스팅이면 거의 확실히 피싱.
 const FREE_HOSTING_RE = /(?:^|\.)(?:workers\.dev|pages\.dev|vercel\.app|netlify\.app|netlify\.com|replit\.dev|repl\.co|github\.io|gitlab\.io|weebly\.com|webflow\.io|web\.app|firebaseapp\.com|surge\.sh|onrender\.com|glitch\.me|wixsite\.com|squarespace\.com|wordpress\.com|blogspot\.com|tiiny\.site|herokuapp\.com|cyclic\.app|fly\.dev|deno\.dev|render\.com|ngrok\.io|ngrok-free\.app|trycloudflare\.com|amplifyapp\.com|amazonaws\.com|cloudfront\.net|azurewebsites\.net|azureedge\.net|azurestaticapps\.net|blob\.core\.windows\.net|web\.core\.windows\.net|storage\.googleapis\.com|appspot\.com|run\.app|digitaloceanspaces\.com|ondigitalocean\.app|backblazeb2\.com|fastly\.net|b-cdn\.net|github\.dev|githubusercontent\.com|gitlab\.io|s3-website[-.][a-z0-9-]+\.amazonaws\.com)$/i;
+
+// FR-029: 멀티테넌트 협업/문서 SaaS 플랫폼. WHOIS/RDAP/CT 소유권은 "플랫폼 운영사"만 증명하고
+// 테넌트·문서 콘텐츠 안전을 보장하지 않는다. FREE_HOSTING_RE 와 달리 임의 익명 호스팅이 아니라
+// 인증된 조직 테넌트가 정상 사용하는 평면이라, 브랜드 사칭으로 단정하지 않는다. 전역 OFFICIAL_DOMAINS
+// safe 등록은 금지(FR-029)이되, hard evidence(O2/O3/O4/O7/D1)·외부 redirect(O0)가 없을 때
+// LLM 의 약신호 단독 격상(login page·many buttons·brand mention 등)은 결정론적으로 cap 한다(O8).
+const SHARED_SAAS_RE = /(?:^|\.)(?:sharepoint\.com|onedrive\.live\.com|dropbox\.com|dropboxusercontent\.com|box\.com|app\.box\.com)$/i;
 
 // 공개 랭킹(Cloudflare Radar KR / Tranco) 기반 한국 인기 도메인 목록.
 // OFFICIAL_DOMAINS와 달리 LLM의 브랜드 인식 없이도 도메인 직접 매칭으로 동작.
@@ -700,6 +711,7 @@ function buildPromptSlices(url, ocr, whois, extracted) {
     { key: "WHOIS",     value: clamp(whois, 600),                                     priority: 2 },
     { key: "BEHAVIORS", value: clamp(formatBehaviors(extracted.behaviors), 1500),     priority: 2.5 },
     { key: "FORMS",     value: joinAndCap(extracted.forms || [], 500),                priority: 3 },
+    { key: "UI_CONTROLS", value: joinAndCap(extracted.uiControls || [], 300),          priority: 4.5 },
     { key: "LINKS",     value: joinAndCap(extracted.anchors || [], 800),              priority: 4 },
     { key: "OCR",       value: clamp(ocr, 800),                                       priority: 5 },
     { key: "TEXT",      value: clamp(extracted.visibleText || "", 1200),              priority: 6 }
@@ -988,7 +1000,9 @@ async function rememberSessionTrustedHost(url, sourceRule) {
 
 async function finalizeVerdict(verdict, extracted, url, key, source, meta) {
   const finalUrl = extracted?.finalUrl || url;
-  if (verdict.phishing === true && (verdict.phishing_score ?? 0) >= 7) {
+  // FR-033: 회귀 모드(bypassUserTrust)에선 denylist 에 쓰지 않는다. 실패한 fixture 가
+  // 영구 denylist 에 등록되면 D1 이 이후 모든 스캔을 phishing 으로 고정해 회귀가 비멱등이 된다.
+  if (!meta.bypassUserTrust && verdict.phishing === true && (verdict.phishing_score ?? 0) >= 7) {
     try {
       const finalHost = new URL(finalUrl).hostname.toLowerCase();
       if (finalHost) await addToDenylist(finalHost);
@@ -1181,7 +1195,7 @@ async function _runScan(url, source, meta, key, bypassLookup) {
   }
   verdict.brand = normalizeBrand(verdict.brand);
   // ── 결정론적 후처리 오버라이드 ──
-  await applyOverrides(verdict, extracted, url, whois);
+  await applyOverrides(verdict, extracted, url, whois, meta);
   return await finalizeVerdict(verdict, extracted, url, key, source, meta);
 }
 
@@ -1230,7 +1244,9 @@ const SHELL_PAYLOAD_RE = /(?:\bcurl\b[\s\S]{0,12000}\|\s*(?:bash|sh|zsh|fish)\b|
 const HARD_DANGEROUS_URI_RE = /^(applescript|ms-msdt|ms-msvr|ms-search|search-ms|shell|vbscript):/i;
 
 function normalizeBrand(brand) {
-  const b = (brand ?? "").toString().trim();
+  // NFC 로 canonical 화 — 한글 브랜드 NFD 출력이 downstream(OFFICIAL_DOMAINS 매칭,
+  // O1-whois 토큰 비교, 표시)에서 일관되게 NFC 로 다뤄지게 한다. [[lm-output-normalization]]
+  const b = (brand ?? "").toString().normalize("NFC").trim();
   if (!b) return null;
   const lower = b.toLowerCase();
   // 모델이 도메인 문자열을 브랜드로 반환하는 케이스를 흡수
@@ -1440,7 +1456,23 @@ function extractRegistrantValue(whoisStr) {
   return m ? m[1].trim() : "";
 }
 
-async function applyOverrides(verdict, extracted, url, whois = "") {
+// 보조 ownership 신호: WHOIS 의 Name Server 호스트 + Contact 이메일 도메인.
+// Registrant/IssuerOrg(소유권 증거, O1-whois)보다 약하므로 단독 safe 근거로 쓰지 않고,
+// O1-infra-corroboration 에서 페이지 브랜드 명시 + free-hosting 부재 + hard evidence 부재와
+// 결합할 때만 weak FP cap 근거로 사용한다. (예: ogog.kr 의 ns1.skplanet.com / domain_skp@skplanet.com)
+function extractInfraDomains(whoisStr) {
+  if (!whoisStr) return [];
+  const s = String(whoisStr);
+  const out = new Set();
+  let m;
+  const nsRe = /Name\s*Server\s*:\s*([a-z0-9.\-]+)/ig;
+  while ((m = nsRe.exec(s))) out.add(m[1].toLowerCase().replace(/\.+$/, ""));
+  const emailRe = /[a-z0-9._%+\-]+@([a-z0-9.\-]+\.[a-z]{2,})/ig;
+  while ((m = emailRe.exec(s))) out.add(m[1].toLowerCase());
+  return [...out].filter(Boolean);
+}
+
+async function applyOverrides(verdict, extracted, url, whois = "", meta = {}) {
   const overrides = [];
   let finalHost = "", origHost = "";
   try { finalHost = new URL(extracted?.finalUrl || url).hostname.toLowerCase(); } catch {}
@@ -1700,7 +1732,9 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
   }
 
   // [O5] 사용자 개인 신뢰 도메인 (즐겨찾기 / 빈번 방문 / Top Sites)
-  if (!overrides.some(o => o.sev === "danger") && finalHost) {
+  // FR-033: meta.bypassUserTrust 가 true 면 (regression mode) O5 전체 skip — 다른 사용자
+  // 브라우저에서 회귀 검증해도 결과 결정성을 보장.
+  if (!meta.bypassUserTrust && !overrides.some(o => o.sev === "danger") && finalHost) {
     try {
       const trustedDomains = await getUserTrustedDomains();
       // shared-hosting eTLD-like 도메인(workers.dev, pages.dev, github.io 등)이 슬라이스
@@ -1748,6 +1782,53 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
       verdict.phishing = false;
       verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
       verdict.suspicious_domain = false;
+    }
+  }
+
+  // [O8] 멀티테넌트 SaaS 플랫폼 (FR-029/030/031). hard evidence·외부 redirect 가 없을 때만,
+  // LLM 의 약신호 단독 격상(brand mention/login page/many buttons)을 결정론적으로 cap 한다.
+  // O1-safe 와 달리 브랜드 소유권을 주장하지 않으므로 DOMAIN_TRUST_RULES 에 넣지 않는다 —
+  // 세션/영구 trust 로 굳히지 않고 매 스캔 재평가(테넌트 콘텐츠는 가변, FR-030).
+  if (!overrides.some(o => o.sev === "danger") && finalHost && SHARED_SAAS_RE.test(finalHost)) {
+    overrides.push({ rule: "O8-saas", sev: "safe",
+      reason: t("bg.override.O8.sharedSaas", finalHost), suppressModelReason: true });
+    verdict.phishing = false;
+    verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+    verdict.suspicious_domain = false;
+  }
+
+  // [O1-infra-corroboration] WHOIS Name Server / Contact 이메일 도메인이 어떤 브랜드의 공식
+  // 도메인과 매칭되고, 그 브랜드(모회사 포함)가 페이지 텍스트/제목/링크에 명시되어 있을 때만
+  // weak FP 를 cap 한다. Registrant/IssuerOrg(O1-whois)보다 약한 보조 증거라서 단독 safe 금지 —
+  // (1) free-hosting 아님 (2) hard evidence(danger) 없음 (3) 페이지에 조직/브랜드 명시
+  // (4) NS/Contact 도메인이 그 브랜드 공식 도메인과 매칭. 네 조건 모두 충족 시에만 score ≤ 3.
+  // O1-whois/transitive/safe 가 이미 처리한 경우는 skip. 소유권 주장이 아니므로 DOMAIN_TRUST_RULES 제외.
+  if (
+    !overrides.some(o => o.sev === "danger") &&
+    !overrides.some(o => ["O1-whois", "O1-whois-transitive", "O1-safe"].includes(o.rule)) &&
+    !finalOnFree && !origOnFree
+  ) {
+    const infra = extractInfraDomains(whois);
+    if (infra.length > 0) {
+      const pageHay = ((extracted?.title || "") + " " +
+                       (extracted?.visibleText || "") + " " +
+                       (extracted?.anchors || []).join(" "))
+        .normalize("NFC").toLowerCase();
+      let matchedBrand = null, matchedInfra = null;
+      for (const [brandKey, domains] of Object.entries(OFFICIAL_DOMAINS)) {
+        const hit = infra.find(d => domains.some(off => d === off || d.endsWith("." + off)));
+        if (!hit) continue;
+        if (pageHay.includes(brandKey.normalize("NFC").toLowerCase())) {
+          matchedBrand = brandKey; matchedInfra = hit; break;
+        }
+      }
+      if (matchedBrand) {
+        overrides.push({ rule: "O1-infra-corroboration", sev: "safe",
+          reason: t("bg.override.O1infra.match", matchedBrand, matchedInfra), suppressModelReason: true });
+        verdict.phishing = false;
+        verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+        verdict.suspicious_domain = false;
+      }
     }
   }
 
@@ -1933,7 +2014,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "scan" && msg.url) {
     const source = msg.source || "popup";
     const tabId = sender.tab?.id ?? (Number.isInteger(msg.tabId) ? msg.tabId : undefined);
-    const meta = { tabId, anchorId: msg.anchorId, bypassCache: !!msg.bypassCache };
+    const meta = {
+      tabId,
+      anchorId: msg.anchorId,
+      bypassCache: !!msg.bypassCache,
+      // FR-033: 회귀 테스트가 사용자 환경 의존 신호 (O5 personal trust = bookmarks/history/topSites)
+      // 를 우회해 결정론적 verdict 를 얻기 위한 플래그. 정상 사용자 흐름에선 송신하지 않음.
+      bypassUserTrust: !!msg.bypassUserTrust,
+    };
     scanUrl(msg.url, source, meta).then(sendResponse).catch(e => sendResponse({ error: String(e) }));
     return true; // async
   }

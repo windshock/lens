@@ -1,5 +1,12 @@
 [
   {
+    "name": "skpcorp-my-sharepoint-tenant",
+    "url": "https://skpcorp-my.sharepoint.com/?source=waffle",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "FR-029/030/031 회귀 fixture. *.sharepoint.com 은 Microsoft 가 운영하는 다중 테넌트 플랫폼. WHOIS/RDAP 는 platform 운영사 (Microsoft) 만 증명하고 tenant 콘텐츠 안전 보장 안 함 (FR-029). `skpcorp-my` 같은 enterprise tenant 의 신뢰는 정책 입력이지 AI 추정 아님 (FR-030). `source=waffle` 은 M365 app launcher referral 파라미터이고 단독 위험 근거 안 됨 (FR-031). 회귀 모드 (bypassUserTrust: true) 에선 O5 가 skip 되므로 LLM 단독 판정이지만, SHARED_SAAS_RE + O8-saas 결정론적 룰이 hard evidence 부재 시 score ≤ 3 으로 cap (2026-06-01 구현, maxScore 5→3 으로 좁힘). 3 초과면 O8 미발화 또는 hard-evidence danger 가 cap 위에서 발화한 것 — SHARED_SAAS_RE 매칭/danger override 확인 필요."
+  },
+  {
     "name": "ogog-kr-okcashbag-sibling",
     "url": "https://ogog.kr/login?type=nosession",
     "expectedPhishing": false,
@@ -61,6 +68,13 @@
     "expectedPhishing": false,
     "maxScore": 3,
     "notes": "진짜 Claude 공식 도메인"
+  },
+  {
+    "name": "netflix-login-safe",
+    "url": "https://www.netflix.com/kr-en/login?serverState=Bgi3uuvcAxKoAjOg31%2FbuJSSSgHGw7osIdSheBrPIXgBvczGmwrKWo4opfzS3fJsEGTcsX%2FZ0RCb8F7RnC2SCaLpZc1VV5e6S1nzDb1fIfrN8CkDnKNmf7ziQ2i9Dbm%2FvAaQLK28QEUjltpJNrrjnfzOxE17VLvLYsGMkm6dZXryhb%2F2z0GcbG%2Fr%2F0lviFakSubx5E4mzb1L7OMbQs7OqmW5hK60%2BMXIM%2BOvcQ2NlbMMw3LnroyP4SMjTEzZj9ydudtPfomoHMpCCprifFpqxoUGQdFFMkT4eSqgw%2B9WbjyEzjRzVEvITzEmj8seiw69gFQgSLBesisB5rrJCUaS8hyehcdFdYWWoxUU5q0qiWtYeF9WhF3muOqTG0DYGiN2BZdFbBbDPo4En67D1SKnadEMGAYiDgoMxWXi4KBUhFLCQlif",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "넷플릭스 정식 로그인 페이지. credential form(이메일/비밀번호) + 긴 serverState 쿼리 파라미터가 있는 정상 페이지 — 회귀 모드(O5 skip)에서 결정론적 PASS 를 위해 OFFICIAL_DOMAINS['Netflix']=['netflix.com'] 등재. www.netflix.com 이 netflix.com 에 suffix 매칭 → O1-safe 가 score ≤ 3 cap. brand 미등재였으면 로그인 폼 단독으로 LM 이 격상할 위험 케이스. serverState 같은 정상 인증 토큰 파라미터가 위험 근거로 쓰이지 않는지도 검증."
   },
   {
     "name": "workers-dev-notebooklm-phish",

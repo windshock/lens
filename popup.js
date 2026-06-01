@@ -266,5 +266,26 @@ async function init() {
       $("scan").disabled = normalizeStatus(status).availability !== "available";
     }
   });
+
+  // ?debug=true 일 때만 회귀테스트 버튼 노출. eval/run_regression.js 를 동적 인젝션해
+  // fixture_manifest.json 전체를 bypassUserTrust 모드로 돌리고 콘솔에 PASS/FAIL 출력.
+  // (popup.html 은 확장 origin 이라 WAR 없이 same-origin <script src> 로드 가능.)
+  if (new URLSearchParams(location.search).get("debug") === "true") {
+    const btn = $("regression");
+    btn.hidden = false;
+    btn.addEventListener("click", () => {
+      btn.disabled = true;
+      $("result").innerHTML = `<div class="verdict v-warn">회귀테스트 실행 중… 콘솔(F12)에서 PASS/FAIL 확인</div>`;
+      const s = document.createElement("script");
+      // ?v=… 로 캐시 무력화 (재로드 직후 옛 버전 로드 방지)
+      s.src = chrome.runtime.getURL("eval/run_regression.js") + "?v=" + Date.now();
+      s.onload = () => { btn.disabled = false; };
+      s.onerror = () => {
+        $("result").innerHTML = `<div class="verdict v-warn">run_regression.js 로드 실패 — 확장 재로드 후 재시도</div>`;
+        btn.disabled = false;
+      };
+      document.head.appendChild(s);
+    });
+  }
 }
 init();

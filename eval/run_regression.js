@@ -3,6 +3,8 @@
 // eval/fixture_manifest.json 의 모든 케이스에 대해 chrome.runtime.sendMessage 로
 // scan 요청을 보내고, expectedPhishing / minScore / maxScore 기대값과 비교해 PASS/FAIL 보고.
 // bypassCache: true 라 single-flight 와 캐시 둘 다 우회 — 매번 깨끗한 LM 호출 발생.
+// bypassUserTrust: true (FR-033) 로 O5 personal trust(북마크/방문기록/topSites) 를 우회 —
+// fixture 의 maxScore/minScore 는 이 결정론적 모드를 전제로 보정돼 있음.
 //
 // 사용법:
 //   1) chrome-extension://<ext-id>/popup.html 을 새 탭으로 열고 DevTools (Cmd-Opt-I)
@@ -27,7 +29,17 @@
     return;
   }
 
-  console.log(`▶ Running ${fixtures.length} fixtures (bypassCache=true)`);
+  // 이전 회귀 실행에서 score>=7 로 끝나 영구 denylist 에 박힌 fixture 호스트를 먼저 비운다.
+  // (denylist 가 남아있으면 D1 이 detection-logic 수정과 무관하게 phishing 을 고정 — 비멱등.)
+  // bypassUserTrust 스캔은 새로 denylist 를 쓰지 않으므로(FR-033), 1회 리셋이면 멱등 보장.
+  try {
+    const r = await chrome.runtime.sendMessage({ type: "resetHistory" });
+    console.log("history reset before run:", r?.cleared ?? r);
+  } catch (e) {
+    console.warn("resetHistory 실패 (계속 진행):", String(e?.message || e));
+  }
+
+  console.log(`▶ Running ${fixtures.length} fixtures (bypassCache=true, bypassUserTrust=true)`);
   console.log("─".repeat(90));
 
   const results = [];
@@ -36,7 +48,8 @@
     let v = null, err = null;
     try {
       v = await chrome.runtime.sendMessage({
-        type: "scan", url: fx.url, source: "contextMenu", bypassCache: true
+        type: "scan", url: fx.url, source: "contextMenu",
+        bypassCache: true, bypassUserTrust: true
       });
     } catch (e) {
       err = String(e?.message || e);
