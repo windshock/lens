@@ -1,3 +1,57 @@
+# Windshock Lens v0.2.5 Release Notes
+
+This release continues the `ogog.kr` false-positive investigation from v0.2.4. Re-running the fixture set in **deterministic regression mode** (`bypassUserTrust: true`, which skips the O5 personal-trust signal) exposed several issues that the user's own bookmarks/history had been masking, plus a class of extraction noise that made normal pages look suspicious.
+
+## 🔤 Korean brand names broke `OFFICIAL_DOMAINS` matching (NFC/NFD)
+
+The biggest finding. With O5 bypassed, `ogog.kr` was still flagged `phishing=true, score 7–8` even though `ogog.kr` is registered directly under `OFFICIAL_DOMAINS["OK캐쉬백"]`.
+
+Root cause: Gemini Nano emits Korean brand strings in **NFD (decomposed Hangul)**, while the source-code keys are **NFC (composed)**. `OFFICIAL_DOMAINS_LC.get("OK캐쉬백")` returns `null` when the lookup string is NFD — `.toLowerCase()` does not normalize Unicode. So `O1-safe` never fired and the LLM's raw score passed straight through. This is the same "direct object-key lookup of free-form LLM output is fragile" class as the v0.1.31 casing bug, now with a Unicode-normalization dimension.
+
+Fix: `lookupOfficialDomains`, the `OFFICIAL_DOMAINS_LC` map keys, and `normalizeBrand` all `.normalize("NFC")` now. `normalizeBrand` makes `verdict.brand` canonical NFC so downstream consumers (O1-whois token comparison, display) stay consistent too. (FR-026 extended.)
+
+## ☁️ Multi-tenant SaaS hosts no longer float to "warn" — `O8-saas`
+
+`https://skpcorp-my.sharepoint.com/?source=waffle` scored 6 (warn). The brand resolved to "Microsoft", but `sharepoint.com` is not in Microsoft's curated official domains, so the host read as a brand-domain mismatch.
+
+The naive fix — adding `sharepoint.com` to `OFFICIAL_DOMAINS["Microsoft"]` — is **explicitly forbidden by FR-029** (no global-safe registration of a multi-tenant platform). Instead, v0.2.5 implements the deterministic rule that FR-029 anticipated:
+
+- `SHARED_SAAS_RE` matches multi-tenant collaboration platforms (`sharepoint.com`, `onedrive.live.com`, `dropbox.com`, `box.com`) at label boundaries (`evil-sharepoint.com.attacker.io` and `mysharepoint.com` do **not** match).
+- `O8-saas` caps `score ≤ 3` **only when no hard evidence (O2/O3/O4/O7/D1) and no bait-redirect (O0)** are present.
+- Unlike `O1-safe`, it does **not** assert brand ownership and is excluded from `DOMAIN_TRUST_RULES` — no session/persistent trust is cached, so each scan re-evaluates (FR-030: tenant content is mutable). A real credential-harvesting page on a SaaS tenant still elevates via hard evidence on top of the cap.
+
+`GAP-006` is now partially resolved (the score-cap layer); document-internal external-link inspection and admin tenant policy remain follow-ups.
+
+## 🏷 WHOIS Name Server / Contact as *auxiliary* ownership evidence — `O1-infra-corroboration`
+
+`Registrant:` / `IssuerOrg:` are ownership evidence (`O1-whois`). But many WHOIS records expose only `Name Server:` and `Contact:` — e.g. `ogog.kr` shows `ns1.skplanet.com` and `domain_skp@skplanet.com`, both pointing at SK Planet infrastructure — which the old code ignored.
+
+New rule `O1-infra-corroboration` parses NS hosts + contact-email domains (`extractInfraDomains`) and caps `score ≤ 3` **only when all four conditions hold**: (1) host is not free/shared-hosting, (2) no hard evidence, (3) the page text/title/anchors explicitly name an `OFFICIAL_DOMAINS` brand (parent company included, e.g. `SK플래닛`), and (4) that brand's official domain matches the NS/contact domain. It is a weak false-positive cap, not a danger override — hard evidence still wins, and it is kept out of `DOMAIN_TRUST_RULES`. (FR-034.)
+
+## 🧹 Extraction quality: FORMS vs UI_CONTROLS, with accessible labels
+
+The `ogog.kr` LLM input was 166 tokens of `<button type="button">` dummies — `content_extract.js` serialized every button's *attributes* but never its visible text or `aria-label`, so a normal page looked like a "button-heavy login/reward page".
+
+- Controls now carry an accessible `label="…"` resolved in order: `aria-label` → `aria-labelledby` → `<label for>` → wrapping `<label>` → own text (buttons) → `title`/`placeholder`.
+- `FORMS` is narrowed to real data-entry/submission surface: `form/input/textarea/select` plus credential/PII/submit buttons (label matches `CREDENTIAL_CTRL_RE`).
+- General buttons with a label (nav/follow/category/etc.) move to a new low-signal `UI_CONTROLS` prompt slice (max 10, dropped first under token pressure).
+- **Label-less button dummies are dropped entirely** so they no longer pollute the LLM input.
+
+(FR-035.)
+
+## 🧪 Regression infrastructure
+
+- **Deterministic mode no longer poisons itself.** A scan ending `phishing=true, score ≥ 7` writes the host to the persistent denylist (`D1`). In regression that made the suite non-idempotent — a failing fixture stayed failed via `D1` regardless of code fixes. `finalizeVerdict` now skips denylist writes when `meta.bypassUserTrust` is set, and `eval/run_regression.js` calls `resetHistory` once at startup to clear prior poisoning. (FR-020/FR-033 extended.)
+- `eval/run_regression.js` now sends `bypassUserTrust: true` alongside `bypassCache: true`.
+- `popup.html?debug=true` exposes a "회귀테스트 실행" button that injects the runner and reports PASS/FAIL in the console.
+- Fixtures: `skpcorp-my.sharepoint.com` `maxScore` tightened 5 → 3 (now that `O8-saas` caps deterministically); new `netflix-login-safe` fixture (a legitimate credential-form login page — `Netflix` added to `OFFICIAL_DOMAINS` so `O1-safe` caps it and the long `serverState` auth token isn't treated as a risk signal).
+
+## Spec sync (SDD)
+
+`docs/development-spec.md`: FR-016 priority list updated; FR-020/026/029/031/033 amended; new FR-034 (NS/Contact corroboration) and FR-035 (extraction quality); override table gains `O1-whois-transitive`, `O1-infra-corroboration`, `O8-saas` rows; §8.1 SaaS trust model documents the `O8-saas` implementation; GAP-006 marked partially resolved.
+
+---
+
 # Windshock Lens v0.2.4 Release Notes
 
 ## 🌐 Sibling-domain trust: transitive rule + OK Cashbag curation fix
