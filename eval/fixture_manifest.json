@@ -1,5 +1,12 @@
 [
   {
+    "name": "ogog-kr-okcashbag-sibling",
+    "url": "https://ogog.kr/login?type=nosession",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "FR-032 회귀 fixture. ogog.kr (OK캐쉬백 커뮤니티 '오글오글') 의 WHOIS 등록인은 '에스케이플래닛(주)' = okcashbag.com 등록인과 동일 → O1-whois-transitive 가 sibling 으로 인정해 score ≤ 3. 페이지에는 카카오/휴대폰 OAuth 만 있고 직접 credential 폼 없음. login page + 많은 버튼 같은 weak reason 만 가지고 danger 못 매김. OFFICIAL_DOMAINS 에 ogog.kr 을 직접 박지 않아도 작동해야 함."
+  },
+  {
     "name": "localhost-benign-fixture",
     "url": "http://127.0.0.1:8765/benign_fixture.html",
     "expectedPhishing": false,

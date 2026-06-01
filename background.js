@@ -91,7 +91,11 @@ const OFFICIAL_DOMAINS = {
   "SK Telecom":   ["sktelecom.com", "tworld.co.kr"],
   "SK플래닛":     ["skplanet.com"],
   "SK Planet":    ["skplanet.com"],
-  "OKCashbag":    ["okcashbag.com"],
+  "OKCashbag":    ["okcashbag.com", "ogog.kr"],
+  "OK Cashbag":   ["okcashbag.com", "ogog.kr"],
+  "OK캐쉬백":     ["okcashbag.com", "ogog.kr"],
+  "오케이캐쉬백": ["okcashbag.com", "ogog.kr"],
+  "오글오글":     ["okcashbag.com", "ogog.kr"],
   "11번가":       ["11st.co.kr"],
   "Naver":        ["naver.com", "naver.net", "navercorp.com"],
   "네이버":       ["naver.com", "naver.net", "navercorp.com"],
@@ -525,9 +529,49 @@ async function fetchWhois(domain) {
   }
 }
 
-// rdap.org bootstrap — 표준 JSON 응답. yesnic 은 .com Verisign 응답에서 Registrant 가
-// redact 되지만, MarkMonitor 같은 registrar RDAP 가 더 풍부한 데이터를 노출하는 경우가
-// 있다(예: Microsoft/Apple 같은 corp 등록 도메인). 결과: "Registrant: <org>" 또는 빈 문자열.
+function extractRegistrantOrgFromRdap(data) {
+  const orgs = [];
+  function walkEntities(entities) {
+    if (!Array.isArray(entities)) return;
+    for (const e of entities) {
+      const roles = e.roles || [];
+      if (roles.includes("registrant") && Array.isArray(e.vcardArray) && Array.isArray(e.vcardArray[1])) {
+        for (const v of e.vcardArray[1]) {
+          if (!Array.isArray(v)) continue;
+          if (v[0] === "org" || v[0] === "fn") {
+            const val = typeof v[3] === "string" ? v[3] : (typeof v[2] === "string" ? v[2] : "");
+            if (val) orgs.push(val.trim());
+          }
+        }
+      }
+      if (e.entities) walkEntities(e.entities);
+    }
+  }
+  walkEntities(data?.entities || []);
+  return orgs.find(o => o && !/^redacted\b/i.test(o)) || orgs[0] || "";
+}
+
+function rdapRelatedLinks(data) {
+  return (data?.links || [])
+    .filter(l => l && l.rel === "related" && /application\/rdap\+json/i.test(l.type || ""))
+    .map(l => l.href || l.value)
+    .filter(Boolean)
+    .filter(href => {
+      try { return new URL(href).protocol === "https:"; }
+      catch { return false; }
+    })
+    .slice(0, 2);
+}
+
+async function fetchRdapJson(url) {
+  const res = await fetch(url, { credentials: "omit" });
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+// rdap.org bootstrap — 표준 JSON 응답. .com/.net registry RDAP 는 registrar 만 보여주고
+// registrant 는 rel=related registrar RDAP 에서만 나오는 경우가 있다(예: MarkMonitor).
+// 결과: "Registrant: <org>" 또는 빈 문자열.
 async function fetchRdap(domain) {
   if (!domain) return "";
   try {
@@ -535,28 +579,19 @@ async function fetchRdap(domain) {
     const cached = await chrome.storage.session.get(cacheKey);
     if (cached[cacheKey] !== undefined) return cached[cacheKey];
     const url = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
-    const res = await fetch(url, { credentials: "omit" });
-    if (!res.ok) { await chrome.storage.session.set({ [cacheKey]: "" }); return ""; }
-    const data = await res.json();
-    const orgs = [];
-    function walkEntities(entities) {
-      if (!Array.isArray(entities)) return;
-      for (const e of entities) {
-        const roles = e.roles || [];
-        if (roles.includes("registrant") && Array.isArray(e.vcardArray) && Array.isArray(e.vcardArray[1])) {
-          for (const v of e.vcardArray[1]) {
-            if (!Array.isArray(v)) continue;
-            if (v[0] === "org" || v[0] === "fn") {
-              const val = typeof v[3] === "string" ? v[3] : (typeof v[2] === "string" ? v[2] : "");
-              if (val) orgs.push(val.trim());
-            }
-          }
-        }
-        if (e.entities) walkEntities(e.entities);
+    const data = await fetchRdapJson(url);
+    if (!data) { await chrome.storage.session.set({ [cacheKey]: "" }); return ""; }
+    let org = extractRegistrantOrgFromRdap(data);
+    if (!org) {
+      for (const href of rdapRelatedLinks(data)) {
+        try {
+          const related = await fetchRdapJson(href);
+          org = extractRegistrantOrgFromRdap(related);
+          if (org) break;
+        } catch {}
       }
     }
-    walkEntities(data.entities || []);
-    const out = orgs.length > 0 ? `Registrant: ${orgs[0].slice(0, 120)}` : "";
+    const out = org ? `Registrant: ${org.slice(0, 120)}` : "";
     await chrome.storage.session.set({ [cacheKey]: out });
     return out;
   } catch (e) {
@@ -889,10 +924,35 @@ const inflightScans = new Map();
 // dispatchResult 안에서만 일어나는 source 들이며, return 값으로 처리되는 popup/click-guard/
 // download-silent-ok/eval/fixture 는 제외해 중복 알림을 피한다.
 const AWAITER_DISPATCH_SOURCES = new Set(["navigation", "owa", "contextMenu", "action"]);
+const CURRENT_TAB_SCAN_SOURCES = new Set(["navigation", "popup", "action"]);
 
 function hostFromUrl(url) {
   try { return new URL(url).hostname.toLowerCase(); }
   catch { return ""; }
+}
+
+async function getTabHttpUrl(tabId) {
+  if (tabId == null || tabId < 0) return "";
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return tab?.url && /^https?:/i.test(tab.url) ? tab.url : "";
+  } catch {
+    return "";
+  }
+}
+
+function sameHostUrl(a, b) {
+  const ah = hostFromUrl(a);
+  const bh = hostFromUrl(b);
+  return !!ah && !!bh && ah === bh;
+}
+
+async function currentTabStillMatchesScan(tabId, scanUrl) {
+  const currentUrl = await getTabHttpUrl(tabId);
+  return {
+    currentUrl,
+    matches: !!currentUrl && sameHostUrl(currentUrl, scanUrl)
+  };
 }
 
 function isSharedHostingHost(host) {
@@ -927,12 +987,14 @@ async function rememberSessionTrustedHost(url, sourceRule) {
 }
 
 async function finalizeVerdict(verdict, extracted, url, key, source, meta) {
+  const finalUrl = extracted?.finalUrl || url;
   if (verdict.phishing === true && (verdict.phishing_score ?? 0) >= 7) {
     try {
-      const finalHost = new URL(extracted?.finalUrl || url).hostname.toLowerCase();
+      const finalHost = new URL(finalUrl).hostname.toLowerCase();
       if (finalHost) await addToDenylist(finalHost);
     } catch {}
   }
+  verdict.final_url = finalUrl;
   verdict.url = url;
   verdict.ts = Date.now();
   await cacheSet(key, verdict);
@@ -1356,6 +1418,28 @@ async function getUserTrustedDomains() {
   return trusted;
 }
 
+// Normalize a WHOIS/RDAP registrant or org string for fuzzy company match.
+// Strips lowercase + common corporate suffixes (EN + KO) + non-alphanumeric (keeps Hangul).
+// "SK Planet Co. Ltd." → "skplanet"
+// "에스케이플래닛(주)" → "에스케이플래닛"
+function normalizeRegistrant(s) {
+  if (!s) return "";
+  return String(s)
+    .toLowerCase()
+    .replace(/(co\.?\s*,?\s*ltd\.?|corporation|corp\.?|inc\.?|llc|gmbh|limited|s\.a\.|s\.r\.l\.)\b/gi, "")
+    .replace(/\(주\)|주식회사|유한회사|\(유\)/g, "")
+    .replace(/[^a-z0-9가-힣]/g, "")
+    .trim();
+}
+
+// Pull the Registrant or IssuerOrg value out of a single whois segment (yesnic + RDAP + CT
+// joined by " | "). Returns the FIRST match — RDAP Registrant takes precedence in practice.
+function extractRegistrantValue(whoisStr) {
+  if (!whoisStr) return "";
+  const m = String(whoisStr).match(/(?:Registrant|IssuerOrg)\s*:\s*([^|]+?)(?:\s*\||$)/i);
+  return m ? m[1].trim() : "";
+}
+
 async function applyOverrides(verdict, extracted, url, whois = "") {
   const overrides = [];
   let finalHost = "", origHost = "";
@@ -1413,8 +1497,58 @@ async function applyOverrides(verdict, extracted, url, whois = "") {
     }
   }
 
+  // [O1-whois-transitive] OFFICIAL_DOMAINS 큐레이션은 anchor 도메인만 유지하고, sibling 은
+  // WHOIS Registrant 동일성으로 런타임 추론. 방문 호스트의 Registrant 와 OFFICIAL_DOMAINS[brand]
+  // anchor 도메인의 Registrant 가 정규화 후 같으면 sibling 으로 인정해 safe cap. 큐레이션 갭
+  // (예: SK Planet 의 ogog.kr — okcashbag.com 과 같은 등록인) 을 자동 보강한다. 공유 호스팅
+  // (FREE_HOSTING_RE) 호스트는 platform 운영사가 비치므로 skip. hard evidence (O2~O7, D1) 는
+  // 별도로 cap 위에서 발화한다.
+  if (
+    verdict.brand &&
+    !overrides.some(o => o.rule === "O1-whois") &&
+    !finalOnFree && !origOnFree
+  ) {
+    const visitedRegistrant = normalizeRegistrant(extractRegistrantValue(whois));
+    if (visitedRegistrant) {
+      const officialList = lookupOfficialDomains(verdict.brand);
+      if (officialList && officialList.length > 0) {
+        // 방문 호스트가 이미 OFFICIAL_DOMAINS[brand] 에 직접 일치하면 transitive 룰 skip — O1 의
+        // 정상 O1-safe 경로가 cap 을 거는 게 더 깔끔.
+        const hostsToCheck = [...new Set([finalHost, origHost].filter(Boolean))];
+        const directlyMatched = hostsToCheck.some(h =>
+          officialList.some(d => h === d || h.endsWith("." + d))
+        );
+        if (!directlyMatched) {
+          for (const anchor of officialList) {
+            try {
+              const anchorRdap = await fetchRdap(anchor);
+              const anchorReg = normalizeRegistrant(extractRegistrantValue(anchorRdap));
+              if (anchorReg && anchorReg === visitedRegistrant) {
+                overrides.push({
+                  rule: "O1-whois-transitive",
+                  sev: "safe",
+                  reason: t(
+                    "bg.override.O1whoisTransitive.match",
+                    verdict.brand,
+                    extractRegistrantValue(whois),
+                    anchor
+                  ),
+                  suppressModelReason: true
+                });
+                verdict.phishing = false;
+                verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+                verdict.suspicious_domain = false;
+                break;
+              }
+            } catch { /* anchor RDAP failed — try next */ }
+          }
+        }
+      }
+    }
+  }
+
   // [O1] 브랜드 ↔ 정식 도메인 불일치 (가장 흔한 사칭 케이스)
-  if (verdict.brand && !overrides.some(o => o.rule === "O1-whois")) {
+  if (verdict.brand && !overrides.some(o => o.rule === "O1-whois") && !overrides.some(o => o.rule === "O1-whois-transitive")) {
     const officialList = lookupOfficialDomains(verdict.brand);
     if (officialList) {
       const highConfidencePhishEvidence =
@@ -1656,6 +1790,18 @@ async function dispatchResult(source, url, verdict, meta) {
     return;
   }
 
+  if (source === "navigation" && meta?.tabId != null) {
+    const targetUrlForTab = verdict?.final_url || url;
+    const tabMatch = await currentTabStillMatchesScan(meta.tabId, targetUrlForTab);
+    if (!tabMatch.matches) {
+      console.log("navigation verdict ignored — tab URL no longer matches scan target:", {
+        targetUrl: targetUrlForTab,
+        currentUrl: tabMatch.currentUrl
+      });
+      return;
+    }
+  }
+
   // 위험 + 사용자가 활성 탭에 있는 경우(action/popup/navigation/download) → 탭 가로채기.
   // contextMenu는 사용자가 아직 방문 안 했으므로 알림만.
   // 사용자의 적극적 액션(navigation/action/popup)은 fresh user intent 이므로 캐시 hit 이어도 intercept 발화.
@@ -1664,6 +1810,16 @@ async function dispatchResult(source, url, verdict, meta) {
   const isUserIntent = source === "navigation" || source === "action" || source === "popup";
   if (sev === "danger" && !meta?.allowed && (isUserIntent || !meta?.cached) && interceptSources.has(source) && meta?.tabId != null) {
     try {
+      const targetUrlForTab = verdict?.final_url || url;
+      const tabMatch = await currentTabStillMatchesScan(meta.tabId, targetUrlForTab);
+      if (!tabMatch.matches) {
+        console.log("tab intercept skipped — tab URL no longer matches scan target:", {
+          source,
+          targetUrl: targetUrlForTab,
+          currentUrl: tabMatch.currentUrl
+        });
+        return;
+      }
       const vid = await sha256Hex(url);
       await chrome.storage.session.set({ ["verdict:" + vid]: verdict });
       const target = `${WARNING_URL}?u=${encodeURIComponent(url)}&vid=${vid}`;

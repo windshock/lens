@@ -139,6 +139,11 @@ flowchart TD
 | FR-025 | 내부 도메인(`INTERNAL_DOMAINS` 또는 RFC1918/loopback/link-local/IPv6 ULA) 은 hidden tab/extract/OCR/WHOIS/LM/hardEvidencePrecheck 전부 skip 한다. SPR-001 의 α 채택 — 내부 도메인 무조건 신뢰. | `scanUrl` 은 비-loopback URL의 allowlist/cache/safeHosts/denylist shortcut 이후, 페이지 추출 전 `internalDomain`이면 즉시 safe verdict 반환. loopback URL은 `bypassLookup=true`라 캐시/allowlist도 우회하고 곧바로 internal safe 경로로 감. 정책 변경 시 fixture localhost-* 와 함께 갱신 |
 | FR-026 | LM 의 brand 출력은 케이싱·suffix 변동(`"Claude"` / `"deepseek ai"` / `"Microsoft Corporation"` 등) 에도 OFFICIAL_DOMAINS 매칭이 안정적이어야 한다. | `lookupOfficialDomains(brand)` 가 `toLowerCase().trim()` + `\s+ai$` suffix strip + 첫 단어 fallback 의 다단 lookup 수행. `OFFICIAL_DOMAINS_LC` 가 모듈 로드 시 빌드됨 |
 | FR-027 | popup 이 `availability=unavailable` 또는 model setup error 상태이면 사용자가 원인을 자가진단할 수 있는 통로를 제공해야 한다. | popup status row 아래 "왜 모델이 안 깔리는지" 링크 노출 → `chrome.runtime.getURL("compat-check.html")` 새 탭 오픈. 진단 페이지는 외부 네트워크 호출 없이 deterministic (Chrome 138+/OS/cores/RAM/Save Data) + heuristic (WebGPU integrated GPU/storage quota) 프로브 후 결과 카드 + "다음 단계" 안내(`chrome://on-device-internals`, `chrome://policy` 등)를 표시. `downloadable` 상태일 때는 `LanguageModel.create({monitor})` 다운로드 트리거 버튼 제공. CSP 상 inline script 금지를 지키기 위해 로직은 `compat-check.js` 외부 파일에 둔다 |
+| FR-028 | 현재 탭에 적용되는 UI 부수효과는 스캔 대상 host와 현재 탭 host가 일치할 때만 발화해야 한다. | 비동기 `navigation` scan 결과가 늦게 돌아와 현재 탭이 다른 host로 이동한 경우 `warning.html` intercept / OS 알림 / inline UI는 생략한다. 단 verdict cache, `lastVerdict`, denylist 기록은 정상적으로 남긴다 |
+| FR-029 | 공유 SaaS / 파일 호스팅 플랫폼의 소유권 신뢰와 콘텐츠 신뢰를 분리해야 한다. | `sharepoint.com`, OneDrive, Dropbox, Google Drive 같은 정상 SaaS 플랫폼의 WHOIS/RDAP/CT 소유권은 "플랫폼 운영사"만 증명한다. 이를 근거로 테넌트 콘텐츠나 문서 내부 링크를 safe 확정하지 않는다. `*.sharepoint.com` 전체 allowlist 또는 `OFFICIAL_DOMAINS` 전역 safe 등록 금지 |
+| FR-030 | 조직 SaaS 테넌트 신뢰는 AI 추론이 아니라 정책 입력이어야 한다. | `skpcorp-my.sharepoint.com` 같은 exact tenant host가 조직 소유인지 AI/WHOIS로 추정하지 않는다. 사내 배포에서 필요하면 관리자가 exact host allowlist/policy로 제공한다. 이 정책은 검사 skip이 아니라 false-positive 완화용이며, O2/O3/O4/O7/D1 및 외부 피싱 redirect 증거는 항상 우선한다 |
+| FR-031 | 정상 SaaS referral/query 파라미터는 단독 위험 근거가 될 수 없다. | Microsoft 365 app launcher 흐름의 `source=waffle` 같은 파라미터는 단독으로 phishing/warn/danger 점수를 올리지 않는다. 위험 평가는 테넌트 맥락, 문서 내용, credential re-auth lure, 외부 링크/redirect, hard evidence와 결합해서만 수행한다 |
+| FR-032 | `OFFICIAL_DOMAINS` 큐레이션 부담을 줄이기 위해 브랜드 sibling 도메인을 WHOIS Registrant 동일성으로 런타임 추론한다. 단, 양쪽 registrant 가 모두 노출 가능한 경우에 한해 동작 — anchor 가 GDPR redact 된 .com 등에는 적용 불가. 미적용 케이스는 anchor + sibling 을 OFFICIAL_DOMAINS 에 명시 등록한다. | `applyOverrides` 의 `O1-whois-transitive` 룰: 방문 호스트가 OFFICIAL_DOMAINS[brand] 에 직접 일치하지 않더라도, 호스트의 WHOIS Registrant 와 brand anchor 도메인의 RDAP Registrant 가 정규화 후 같으면 sibling 으로 인정해 점수 ≤ 3 으로 cap. 정규화는 lowercase + 법인 접미사 (Co./Ltd./Inc./LLC/GmbH/Corporation/(주)/주식회사) 제거 후 비교. free-hosting (FREE_HOSTING_RE) 호스트는 O1-whois 와 동일하게 skip. hard evidence (O2/O3/O4/O7/D1) 는 cap 위에서 우선 발화. **한계**: anchor 가 .com 이고 Verisign 가 Registrant 를 GDPR redact 한 경우 (대다수 retail .com) 이 룰은 silent no-op — 그 케이스는 OFFICIAL_DOMAINS 에 sibling 을 명시 추가해야 함. 첫 fixture: `ogog.kr/login?type=nosession` — 이 케이스는 anchor (okcashbag.com) RDAP 가 redact 되어 transitive 룰이 발화하지 않으므로 OFFICIAL_DOMAINS["OK캐쉬백"] 에 ogog.kr 명시 등록 + 브랜드 alias (영문/한글) 로 처리. transitive 룰은 미래의 .kr↔.kr / corporate-RDAP anchor 케이스에 자동 작동 |
 
 ## 7. 비기능 요구사항
 
@@ -151,6 +156,7 @@ flowchart TD
 | NFR-005 | 권한 사용은 문서화되어야 한다. | `<all_urls>`, downloads, history/bookmarks/topSites의 목적이 변경 시 검토됨 |
 | NFR-006 | 모델 비결정성은 코드 룰과 fixture로 관리한다. | 룰 변경 시 fixture 추가 또는 갱신 |
 | NFR-007 | 개인정보/민감값은 저장하지 않는다. | clipboard payload는 검사 입력으로만 사용, 장기 저장 금지. 단 verdict reason에 일부 payload가 들어갈 수 있으므로 캡 유지 |
+| NFR-008 | 사용자별 로컬 신뢰 신호(O5)는 조직 공통 정책을 대체하지 않는다. | history/bookmarks/topSites 유무에 따라 같은 SaaS URL의 verdict가 과도하게 갈리지 않도록, 공통 SaaS 패턴은 별도 룰/fixture로 관리한다. O5는 보조 false-positive 완화 신호로만 유지 |
 
 ## 8. 판정 룰 카탈로그
 
@@ -166,6 +172,35 @@ flowchart TD
 | D1 | danger | persistent denylist host hash hit | score >= 8 |
 | O5 | safe | 사용자 bookmark/history/topSites 신뢰 도메인 | score <= 3, danger 없을 때만 |
 | O6 | safe | 국내 인기 도메인 | score <= 3, danger 없을 때만 |
+
+## 8.1 공유 SaaS / 파일 호스팅 신뢰 모델
+
+Microsoft 365 SharePoint/OneDrive, Dropbox, Google Drive 같은 파일 호스팅 SaaS는 합법 업무 흐름과 피싱 흐름이 같은 플랫폼 도메인을 공유한다. 따라서 Windshock Lens는 다음 신뢰 계층을 분리한다.
+
+| 계층 | 예 | 의미 | 판정 정책 |
+|---|---|---|---|
+| 플랫폼 소유권 | `sharepoint.com` WHOIS/RDAP/CT가 Microsoft | 플랫폼 운영사 확인 | 콘텐츠 safe 확정 금지. O1-whois/O1-safe의 전역 safe 근거로 쓰지 않음 |
+| 테넌트 식별 | `skpcorp-my.sharepoint.com` | 조직 테넌트일 수 있는 exact host | 공개 버전은 자동 추정 금지. 사내 배포는 관리자 정책으로 exact host만 등록 가능 |
+| 문서/페이지 콘텐츠 | 문서 제목, 본문, 버튼, embedded link | 실제 사용자 위험면 | DOM/OCR/link/behavior로 검사. 외부 재인증/2차 링크/다운로드/스크립트 증거가 있으면 위험 |
+| 클릭 후 흐름 | SharePoint 문서에서 외부 URL로 이동 | 피싱 payload 위치 | 최종 클릭 대상과 redirect chain을 별도 검사. `sharepoint.com` 출발이라는 사실만으로 safe 처리 금지 |
+
+공유 SaaS에서 단독으로 위험 근거가 되면 안 되는 예:
+
+- `source=waffle`, app launcher/referral 계열 query parameter
+- Microsoft/Dropbox/Google 소유권 WHOIS 자체
+- view-only 또는 restricted access 자체
+
+공유 SaaS에서 위험도를 올릴 수 있는 예:
+
+- 문서 내부의 "View message", "Open secured document", "Re-authenticate"류 CTA가 외부 도메인으로 연결
+- Microsoft 로그인/MFA 재입력을 요구하지만 host/redirect 흐름이 공식 auth 도메인과 맞지 않음
+- 단축 URL, 신규 등록 도메인, free-hosting(`workers.dev` 등), AiTM proxy로 이동
+- 자동 다운로드, 위험 URI, clipboard shell payload, phishing-kit marker 같은 hard evidence
+
+근거 문서:
+
+- Microsoft Security Blog, "File hosting services misused for identity phishing" (2024-10-08): SharePoint/OneDrive/Dropbox 같은 정상 파일 호스팅 서비스가 identity phishing에 악용되며, restricted/view-only 파일과 재인증/2차 링크가 분석 회피에 쓰인다고 설명.
+- Microsoft Security Blog, "Resurgence of a multi-stage AiTM phishing and BEC campaign abusing SharePoint" (2026-01-21): SharePoint 악용 multi-stage AiTM/BEC 캠페인 사례.
 
 ## 9. 저장소와 상태
 
@@ -207,6 +242,7 @@ flowchart TD
 | TEST-011 | popup 콘솔에서 `eval/run_regression.js` 인젝션 → `fixture_manifest.json` 전체 케이스 일괄 검증 | 회귀 검증, PASS/FAIL 보고. 현재 manifest는 15 케이스이며, 새 케이스 추가는 manifest 만 수정 |
 | TEST-012 | popup 콘솔에서 `eval/run_spof.js` 인젝션 → `__spof_runAll()` 또는 `__spof_TNX/TIP/TALLDOWN/TSLOW` 개별 | SPOF 시나리오 (DNS 실패 / IP-only / 모든 fetch 차단 / 느린 로딩) — 외부 의존성 실패 시 verdict 손실 없음 검증 |
 | TEST-013 | SW 콘솔에서 `eval/spof_sw_helpers.js` 인젝션 → `__spof.blockAllFetch()` 후 popup `__spof_TALLDOWN()` | 보조 fetch 실패 상황에서 scan verdict가 손실되지 않는지 확인. 끝나고 `__spof.restore()` 로 원복. notification reject 격리는 별도 강제 실패 테스트가 필요 |
+| TEST-014 | SharePoint/OneDrive SaaS fixture 세트 | `source=waffle` 단독 FP 방지, `*.sharepoint.com` 전역 safe 금지, 조직 exact tenant policy 적용 시에도 hard evidence/외부 redirect가 danger로 우선하는지 검증 |
 
 ## 12. 현재 정리 필요 항목
 
@@ -217,6 +253,7 @@ flowchart TD
 | GAP-003 | "Zero-Data" 문구가 WHOIS/RDAP/CT/이미지 fetch와 혼동될 수 있다. | "외부 LLM 전송 없음"과 "소유권/리소스 조회는 발생"을 제품 문구에 분리 |
 | GAP-004 | `eval/eval_harness.py`는 기본적으로 manifest version을 bump한다. | CI/로컬 검증에서 `--no-bump` 사용 기준 명시 |
 | GAP-005 | `<all_urls>`, `history`, `bookmarks`, `topSites`, `downloads` 권한은 강하다. | 사내 배포/스토어 배포 전 권한 정당성 문서와 opt-in 정책 검토 |
+| GAP-006 | 공유 SaaS / 파일 호스팅 플랫폼 신뢰 모델이 코드와 fixture에 아직 완전히 반영되지 않았다. | FR-029~031에 맞춰 SharePoint/OneDrive fixture 추가. `sharepoint.com` 전역 allowlist 금지, exact tenant policy 설계, 문서 내부 외부 링크 추출/검사 전략 결정 |
 
 ## 13. 변경 요청 템플릿
 

@@ -112,6 +112,7 @@
 
       "bg.override.O0.baitRedirect":  "Evasive redirect: origin ({0}) is on free hosting but the page redirected to a legitimate domain ({1}) — likely sandbox evasion.",
       "bg.override.O1whois.match":    "WHOIS / RDAP / CT match the brand '{0}' — domain appears to be legitimately owned.",
+      "bg.override.O1whoisTransitive.match": "Same WHOIS registrant '{1}' as brand '{0}' anchor domain ({2}) — sibling service trust.",
       "bg.override.O1.freeHostStrong":"Brand impersonation on free hosting: '{0}' official domain is {1} but the page is on {2}.",
       "bg.override.O1.docPagesMention":"Doc-style GitHub Pages: mentions '{0}' but no clipboard payload / dangerous URI / auto-download / login form.",
       "bg.override.O1.freeHostWarn": "Brand mention + free hosting: '{0}' official domain is {1} but the page is on {2} (do not flag as phishing on this signal alone).",
@@ -308,6 +309,7 @@
 
       "bg.override.O0.baitRedirect":  "회피형 redirect: 원본({0})이 무료 호스팅인데 정식 도메인({1})로 우회 redirect — 분석 회피 의심",
       "bg.override.O1whois.match":    "WHOIS/RDAP/CT 가 브랜드 '{0}' 와 일치 — 정식 도메인 추정",
+      "bg.override.O1whoisTransitive.match": "브랜드 '{0}' anchor 도메인 ({2}) 과 동일한 WHOIS 등록인 '{1}' — sibling 서비스로 인정",
       "bg.override.O1.freeHostStrong":"브랜드 사칭 + 무료 호스팅: '{0}' 정식 도메인은 {1} 인데 페이지는 {2}",
       "bg.override.O1.docPagesMention":"문서형 GitHub Pages: '{0}' 브랜드를 언급하지만 클립보드 페이로드/위험 URI/자동 다운로드/로그인 폼 없음",
       "bg.override.O1.freeHostWarn": "브랜드 언급 + 무료 호스팅: '{0}' 정식 도메인은 {1} 이지만 페이지는 {2} (단독 증거로 피싱 확정 금지)",

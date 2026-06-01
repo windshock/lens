@@ -1,3 +1,107 @@
+# Windshock Lens v0.2.4 Release Notes
+
+## 🌐 Sibling-domain trust: transitive rule + OK Cashbag curation fix
+
+A user reported a false positive on `https://ogog.kr/login?type=nosession` — the
+extension flagged it as "Phishing suspected · 7/10 · OK캐쉬백" with self-contradictory
+reasoning. The page is in fact the official OK Cashbag community service (오글오글) run
+by SK Planet, with WHOIS registrant "에스케이플래닛(주)".
+
+Root cause analysis surfaced two layered problems:
+
+1. **Curation gap.** `OFFICIAL_DOMAINS["OKCashbag"]` only listed `okcashbag.com`.
+   The brand had no Korean aliases and no related domains, so the LLM-proposed brand
+   "OK캐쉬백" did not resolve to any anchor; `O1` then fired as brand-domain mismatch.
+2. **Scaling problem behind it.** Even if a maintainer adds `ogog.kr` today, the same
+   class of false positive will return for the next sibling domain. Hand-curating
+   every "brand × related domain × locale alias" cell does not scale.
+
+### Two fixes, in order of impact
+
+**(a) Immediate curation fix (manual but bounded).** Aliases and the sibling
+domain for OK Cashbag are added to `OFFICIAL_DOMAINS` in `background.js`:
+
+```
+"OKCashbag"      / "OK Cashbag"  → okcashbag.com, ogog.kr
+"OK캐쉬백" / "오케이캐쉬백" / "오글오글"  → same
+```
+
+The brand aliases cover both English and Hangul variants of the LLM's likely brand
+output. With these entries, `ogog.kr` matches `OFFICIAL_DOMAINS[brand]` directly and
+goes through the existing `O1-safe` cap.
+
+**(b) New deterministic override: `O1-whois-transitive`.** For future cases that we
+have not yet seen and curated, the extension now performs a runtime cross-check:
+
+1. If `OFFICIAL_DOMAINS[brand]` resolves to one or more anchor domains,
+2. Fetch RDAP for each anchor (via the existing `fetchRdap` and its session cache),
+3. Normalize both the visited host's WHOIS registrant and the anchor's RDAP registrant
+   (lowercase + strip corporate suffixes like `Co./Ltd./Inc./LLC/GmbH/(주)/주식회사`,
+   keep Hangul and alphanumerics),
+4. If the normalized registrants match, treat the visited host as a sibling and cap
+   `phishing_score` at 3, mark `phishing=false`, suppress the model's reasoning.
+
+Hard evidence (`O2` clipboard shell, `O3` auto-download, `O4` dangerous URI scheme,
+`O7` phishing-kit markers, `D1` denylist) still runs *after* this rule and can
+re-flag the page on real malicious behavior. Free-hosting hosts (`workers.dev`,
+`pages.dev`, `vercel.app`, etc.) are excluded — the platform vendor's registrant
+would otherwise transitively trust arbitrary tenant content. Same guard as `O1-whois`
+since v0.1.31.
+
+### Honest scope: when (b) actually helps
+
+The transitive rule is not a silver bullet. It works only when *both* sides expose a
+usable registrant string:
+
+| Side | Common case | Result |
+|---|---|---|
+| Visited `.kr` host | yesnic WHOIS exposes 등록인 + Registrant | usable |
+| Visited `.com` host | RDAP via rdap.org / Verisign | **redacted under GDPR** for most retail .com domains |
+| Anchor `.com` (most major brands) | RDAP | redacted |
+| Anchor with corporate RDAP (Microsoft, Apple, MarkMonitor-managed) | RDAP | usable |
+
+For the specific `ogog.kr` ↔ `okcashbag.com` pair the anchor's RDAP returns only
+`Registrar: Gabia, Inc.` — `okcashbag.com` is Verisign-redacted and gives no
+Registrant field. The transitive rule therefore *cannot* solve this particular case
+on its own, which is why the manual curation in (a) is still required.
+
+Cases where (b) will help without further curation:
+- Sibling pairs where both sides are `.kr` / `.co.kr` (yesnic exposes 등록인 + Registrant).
+- Pairs where the anchor's RDAP is served by an enterprise registrar like MarkMonitor
+  (Microsoft, Apple, large financial institutions). These commonly retain Registrant
+  org.
+- Pairs where Certificate Transparency `IssuerOrg` is a corporate CA (rare but
+  decisive when present).
+
+For Verisign-redacted .com anchors with regional sibling domains the rule will
+silently no-op, and a maintainer must still add the sibling to `OFFICIAL_DOMAINS`.
+
+### Spec
+
+`docs/development-spec.md` adds **FR-032**: anchor-only curation policy with runtime
+WHOIS-registrant transitivity. The acceptance criterion explicitly notes the
+GDPR-redaction limitation.
+
+### Fixture
+
+`eval/fixture_manifest.json` adds `ogog-kr-okcashbag-sibling`. It validates the
+end-to-end behavior: the brand aliases let `O1-safe` cap the score, the model's
+"login page is common in phishing" reasoning gets suppressed, and the final verdict
+is `score ≤ 3`, `phishing=false`. Hard evidence overrides remain wired up; the same
+URL with an injected clipboard shell payload should still flag danger.
+
+### Lesson the rule bakes in
+
+The original instinct ("add ogog.kr because web search says SK Planet operates it")
+is exactly the failure mode that produced this false positive — making identity
+decisions from secondary signals. The new rule encodes the safer pattern
+mechanically when the evidence is available: cross-check two independent ownership
+signals (visited host's WHOIS, anchor's RDAP) before granting identity trust.
+Manual curation still happens for cases the transitive rule cannot reach, but the
+curation now sits behind a falsifiable evidence requirement.
+
+---
+
 # Windshock Lens v0.2.3 Release Notes
 
 ## 🌐 Compatibility check page is now bilingual (EN / KO)
