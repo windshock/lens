@@ -8,18 +8,10 @@ const translations = {
     heroEyebrow: "Chrome MV3 · on-device AI · defensive research",
     heroLead: "Browser-side phishing protection for gray-zone pages in the AI era.",
     heroBody: "Windshock Lens combines local page extraction, deterministic security rules, OCR, domain ownership signals, and on-device Gemini Nano analysis to help evaluate suspicious pages without sending page content to external LLM APIs.",
+    videoEmbedUrl: "https://www.youtube-nocookie.com/embed/ANW2ijbUsqI?rel=0",
+    videoTitle: "Windshock Lens introduction video in English",
     actionGithub: "View on GitHub",
     actionWorkflow: "How it works",
-    visualLabel: "Current verdict",
-    visualVerdict: "High risk, evidence-based",
-    visualSignal1: "Credential form",
-    visualSignal2: "Brand mismatch",
-    visualSignal3: "Kit marker",
-    visualSignal4: "RDAP/CT checked",
-    visualFlow1: "Extract",
-    visualFlow2: "Precheck",
-    visualFlow3: "Analyze",
-    visualFlow4: "Warn",
     summaryOneTitle: "100% local page-content analysis",
     summaryOneBody: "Browsing context stays on the device.",
     summaryTwoTitle: "Complements Safe Browsing",
@@ -103,18 +95,10 @@ const translations = {
     heroEyebrow: "Chrome MV3 · 온디바이스 AI · 방어 연구",
     heroLead: "AI 시대의 그레이존 피싱 페이지를 브라우저 안에서 판별합니다.",
     heroBody: "Windshock Lens는 로컬 페이지 추출, 결정론적 보안 규칙, OCR, 도메인 소유권 신호, 온디바이스 Gemini Nano 분석을 결합해 페이지 콘텐츠를 외부 LLM API로 보내지 않고 의심 페이지를 평가합니다.",
+    videoEmbedUrl: "https://www.youtube-nocookie.com/embed/AEClvmLbDu4?rel=0",
+    videoTitle: "Windshock Lens 한국어 소개 영상",
     actionGithub: "GitHub에서 보기",
     actionWorkflow: "동작 방식",
-    visualLabel: "현재 판정",
-    visualVerdict: "고위험, 증거 기반",
-    visualSignal1: "자격 증명 폼",
-    visualSignal2: "브랜드 불일치",
-    visualSignal3: "피싱 킷 마커",
-    visualSignal4: "RDAP/CT 확인",
-    visualFlow1: "추출",
-    visualFlow2: "사전 검사",
-    visualFlow3: "분석",
-    visualFlow4: "경고",
     summaryOneTitle: "페이지 콘텐츠 100% 로컬 분석",
     summaryOneBody: "브라우징 맥락은 사용자의 기기 안에 남습니다.",
     summaryTwoTitle: "Safe Browsing 보완",
@@ -222,6 +206,14 @@ function applyLanguage(lang) {
       node.textContent = copy[key];
     }
   });
+
+  const videoEmbed = document.querySelector("[data-video-embed]");
+  if (videoEmbed && copy.videoEmbedUrl) {
+    if (videoEmbed.getAttribute("src") !== copy.videoEmbedUrl) {
+      videoEmbed.setAttribute("src", copy.videoEmbedUrl);
+    }
+    videoEmbed.setAttribute("title", copy.videoTitle || "Windshock Lens introduction video");
+  }
 
   document.querySelectorAll("[data-lang-switch]").forEach((button) => {
     button.setAttribute("aria-pressed", String(button.dataset.langSwitch === lang));
