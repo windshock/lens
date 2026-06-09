@@ -69,6 +69,7 @@
   // 최근 스캔 결과 캐시 — URL이 바뀌지 않는 한 영구. SPA 라우팅 등 URL 변경 시 무효화.
   let lastVerdict = null;
   let lastVerdictUrl = null;
+  let warnApprovedUrl = null;
   // 현재 in-flight 스캔(같은 페이지에서 동시 다중 클릭 막음)
   let inflight = null;
 
@@ -108,6 +109,34 @@
     }
     div.textContent = "⚠ " + message;
     setTimeout(() => { div?.remove(); }, 8000);
+  }
+
+  async function isWarnApprovedForCurrentUrl() {
+    const url = location.href;
+    if (warnApprovedUrl === url) return true;
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: "clickGuardWarnApprovalStatus",
+        url
+      });
+      if (res?.approved) {
+        warnApprovedUrl = url;
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+
+  async function rememberWarnApprovalForCurrentUrl(verdict) {
+    const url = location.href;
+    warnApprovedUrl = url;
+    try {
+      await chrome.runtime.sendMessage({
+        type: "rememberClickGuardWarnApproval",
+        url,
+        score: verdict?.phishing_score
+      });
+    } catch {}
   }
 
   // ── prefetch: 페이지에 실제로 검사 트리거가 될 만한 요소(Copy 버튼/다운로드 링크/위험 URI)가
@@ -200,11 +229,16 @@
         return;
       }
       if (v && (v.phishing_score ?? 0) >= 4) {
-        const ok = confirm(
-          `이 페이지가 의심스럽습니다 (score ${v.phishing_score}/10).\n` +
-          `사유: ${(v.reason || "").slice(0, 300)}\n\n계속 진행하시겠습니까?`
-        );
-        if (!ok) return;
+        if (!await isWarnApprovedForCurrentUrl()) {
+          const ok = confirm(
+            `이 페이지가 의심스럽습니다 (score ${v.phishing_score}/10).\n` +
+            `사유: ${(v.reason || "").slice(0, 300)}\n\n` +
+            "확인을 누르면 이번 브라우저 세션 동안 같은 URL의 클릭 경고는 다시 묻지 않습니다.\n" +
+            "계속 진행하시겠습니까?"
+          );
+          if (!ok) return;
+          await rememberWarnApprovalForCurrentUrl(v);
+        }
       }
       allowedClicks.add(ev.target);
       ev.target.click?.();

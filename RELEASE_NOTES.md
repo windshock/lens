@@ -1,3 +1,52 @@
+# Windshock Lens v0.2.6 Release Notes
+
+This release focuses on false-positive reduction for legitimate developer install pages and Korean identity-verification flows, plus a click-guard usability fix for repeated warn-level confirmations.
+
+## Developer install pages — `O9-first-party-install`
+
+Official developer download pages can legitimately show commands like `curl -fsSL https://ollama.com/install.sh | sh`. Gemini Nano can score those as warn-level simply because they ask the user to paste a shell command into a terminal.
+
+v0.2.6 adds a narrow deterministic cap instead of adding every developer tool to `OFFICIAL_DOMAINS`:
+
+- the model brand token must match the current registered-domain label;
+- the command must come from `pre/code`;
+- the command URL must stay on the same registered domain;
+- the target path must look like an installer script (`install.sh`, `setup`, `bootstrap`, etc.);
+- the page must have install/download plus developer/OS context;
+- clipboard shell payloads, obfuscation, captcha/verification lures, credential forms, dangerous URI schemes, auto-downloads, phishing-kit markers, and free/shared hosting all block the cap.
+
+The new `ollama-official-install-safe` fixture uses `https://ollama.com/download` and expects `score <= 3`.
+
+## Korean identity-verification flows — `O11` / `O12`
+
+Normal Korean service flows often POST users from a first-party site to a third-party identity provider such as KCB ok-name / PASS. The old prompt could treat the cross-domain POST or final provider page as brand-domain mismatch evidence.
+
+v0.2.6 separates those flows into provider context:
+
+- `content_extract.js` records cross-domain form metadata only: action origin/path, source/target registered domains, method, field names, hidden field names, and query parameter names. It does not store field values.
+- hidden-tab scans also capture main/sub-frame POST field names through `webRequest` so auto-submitted provider flows can still be classified after navigation.
+- `CROSS_DOMAIN_FORMS` and `PROVIDER_PAGE_CONTEXT` prompt slices tell the model when the target is a recognized third-party identity provider.
+- `O11-third-party-form-provider` caps known provider POST flows when endpoint/path and parameter signatures match and no hard evidence is present.
+- `O12-third-party-provider-page` caps direct scans of recognized provider pages and prevents inherited source-brand mismatch.
+
+The fixture set adds Howcare and KCB/PASS cases covering the first-party page, the PASS popup flow, and the provider page itself.
+
+## Model score consistency — `O10-model-consistency`
+
+Some verdicts returned `phishing=false` and `suspicious_domain=false` with a benign reason, but still produced a high score. When there is no hard evidence, v0.2.6 now caps those internally inconsistent safe verdicts to `score <= 3`.
+
+## Click guard warn approval
+
+Warn-level click-guard prompts (`score 4-6`) no longer ask on every social/copy/download click after the user confirms once.
+
+The confirmation is stored only for the exact URL in `chrome.storage.session.clickGuardWarnApprovals` with a six-hour TTL. It is not promoted to host allowlist or `safeHosts`, and danger verdicts still block.
+
+## Regression
+
+The deterministic fixture suite was run by the maintainer and passed after these changes.
+
+---
+
 # Windshock Lens v0.2.5 Release Notes
 
 This release continues the `ogog.kr` false-positive investigation from v0.2.4. Re-running the fixture set in **deterministic regression mode** (`bypassUserTrust: true`, which skips the O5 personal-trust signal) exposed several issues that the user's own bookmarks/history had been masking, plus a class of extraction noise that made normal pages look suspicious.

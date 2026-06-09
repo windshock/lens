@@ -42,6 +42,27 @@
     "notes": "가장 기본적인 정상 사이트"
   },
   {
+    "name": "howcare-official-healthcare-safe",
+    "url": "https://www.howcare.co.kr/",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "정상 한국 헬스케어/검진예약 사이트. LLM 이 brand='어떠케어 (Howcare)', phishing=false, suspicious_domain=false, reason='legitimate/no clear phishing indicators' 류를 내면서 score만 8로 주는 자기모순 FP 회귀. hard evidence 없으면 O10-model-consistency 로 score ≤ 3 cap."
+  },
+  {
+    "name": "howcare-kcb-pass-popup-safe",
+    "url": "https://www.howcare.co.kr/user/pass/pass-popup",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "FR-038 회귀 fixture. 어떠케어 본인인증 팝업이 KCB ok-name 의 `safe.ok-name.co.kr/CommonSvl` 로 hidden POST 하는 정상 third-party identity verification 흐름. `cp_cd`/`mdl_tkn`/`tc`/`target_id` 시그니처가 맞고 hard evidence 없으면 O11-third-party-form-provider 로 score ≤ 3 cap. cross-domain POST 단독으로 suspicious_domain=true 금지."
+  },
+  {
+    "name": "kcb-okname-provider-page-safe",
+    "url": "https://safe.ok-name.co.kr/CommonSvl",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "FR-038/039 회귀 fixture. KCB ok-name/PASS provider 페이지 자체를 스캔할 때 source brand(예: Howcare)를 이어받아 도메인 불일치로 보지 않아야 한다. provider page 는 `brand='KCB ok-name / PASS'` 성격으로 분리하고 hard evidence 없으면 O12-third-party-provider-page 로 score ≤ 3 cap. 과거 오탐으로 denylist 에 들어간 경우에도 known provider path 는 denylist short-circuit 전에 제거하고 재평가."
+  },
+  {
     "name": "nextjs-safe",
     "url": "https://nextjs.org",
     "expectedPhishing": false,
@@ -54,6 +75,13 @@
     "expectedPhishing": false,
     "maxScore": 3,
     "notes": "github.io 정상 문서 — FP 위험지대"
+  },
+  {
+    "name": "ollama-official-install-safe",
+    "url": "https://ollama.com/download",
+    "expectedPhishing": false,
+    "maxScore": 3,
+    "notes": "공식 개발자 다운로드 페이지에서 같은 등록 도메인의 HTTPS install.sh 를 `curl ... | sh` 로 안내하는 정상 설치 UX. OFFICIAL_DOMAINS 큐레이션에 Ollama를 추가하지 않고, O9 first-party install command cap 으로 LM의 shell-command FP를 완화해야 한다. pre/code 추출 명령 + 설치/다운로드 문맥 + same registered domain 일 때만 cap. 클립보드 강제쓰기/난독화/위험 URI/자동 다운로드/credential form 이 있으면 이 cap 은 발화하면 안 됨."
   },
   {
     "name": "deepseek-official-safe",

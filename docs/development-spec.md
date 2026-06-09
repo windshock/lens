@@ -82,6 +82,8 @@ flowchart TD
 | `resetHistoryForUrl` | `{ url }` | `{ ok, host, denyRemoved, sessionRemoved }` | host/URL 단위 기록 초기화 |
 | `resetHistory` | `{}` | `{ ok, cleared }` | 전체 검사 기록 초기화 |
 | `getVerdict` | `{ vid }` 또는 `{ url }` | `Verdict|null` | warning/verdict 화면 조회 |
+| `clickGuardWarnApprovalStatus` | `{ url }` | `{ approved, host?, expiresAt? }` | click guard 전용 exact-URL warn 재확인 생략 상태 조회 |
+| `rememberClickGuardWarnApproval` | `{ url, score? }` | `{ ok, host?, expiresAt? }` | click guard warn 확인을 세션에 기록. allowlist 아님 |
 | `debug-extract` | `{ url }` | 추출 결과 | 개발 디버그용 |
 
 ### 5.2 Offscreen messages
@@ -119,7 +121,7 @@ flowchart TD
 | FR-005 | 사용자가 직접 방문한 http/https 활성 탭은 navigation scan 대상이어야 한다. | hidden scan tab, inactive tab, 비 http(s)는 제외 |
 | FR-006 | popup은 모델 상태, 진행 단계, 현재 페이지 verdict, 기록 초기화를 제공해야 한다. | 60초 timeout 이후 spinner가 무한 지속되지 않음 |
 | FR-007 | 우클릭 링크 검사는 현재 페이지가 아니라 `info.linkUrl`을 검사해야 한다. | context menu `"scan-link"` 유지 |
-| FR-008 | click guard는 위험 URI/data executable은 즉시 차단하고, 다운로드/copy/social 버튼은 페이지 스캔 후 진행 여부를 결정해야 한다. | danger verdict는 클릭 차단, warn은 사용자 확인, safe는 원 클릭 재실행 |
+| FR-008 | click guard는 위험 URI/data executable은 즉시 차단하고, 다운로드/copy/social 버튼은 페이지 스캔 후 진행 여부를 결정해야 한다. | danger verdict는 클릭 차단, warn은 사용자 확인 후 같은 exact URL 에 대해 이번 브라우저 세션 동안 재확인 생략, safe는 원 클릭 재실행. warn 승인은 click guard 전용 `clickGuardWarnApprovals` 세션 키에 URL hash 로 저장하며 host allowlist / safeHosts 로 승격하지 않는다 |
 | FR-009 | 다운로드 시작 시 호스팅 페이지를 검사하고 danger면 다운로드를 cancel/erase해야 한다. | 안전 다운로드는 조용히 resume |
 | FR-010 | 페이지 추출은 활성 탭 주입, OWA 정적 fetch, hidden tab 동적 렌더링 경로를 구분해야 한다. | `navigation`/`popup`/`download-silent-ok`는 가능하면 활성 탭 주입, `owa`는 hidden tab 금지 |
 | FR-011 | hidden tab 스캔은 `#__pg_scan=1` 마커로 click_guard cascade를 방지해야 한다. | marker URL은 최종 추출 URL에서 제거 |
@@ -127,7 +129,7 @@ flowchart TD
 | FR-013 | WHOIS/RDAP/CT 소유권 정보는 LLM prompt와 deterministic override 모두에 제공되어야 한다. | yesnic/RDAP/CT 결과는 한 줄 문자열로 결합 |
 | FR-014 | hard evidence는 LLM 호출 전 danger verdict를 만들 수 있어야 한다. | shell clipboard, auto-download, hard dangerous URI, kit marker + credential form은 `llm_skipped=true` 가능 |
 | FR-015 | LLM 출력은 schema로 강제되고 JSON 파싱 실패 시 오류를 반환해야 한다. | `VERDICT_SCHEMA` 변경 시 UI와 eval도 동기화 |
-| FR-016 | 결정론적 override는 LLM보다 우선해야 한다. | O0/O1/O1-whois/O1-whois-transitive/O1-infra-corroboration/O2/O3/O4/O7/D1/O5/O6/O8-saas의 우선순위와 safe/danger 충돌 규칙 유지 |
+| FR-016 | 결정론적 override는 LLM보다 우선해야 한다. | O0/O1/O1-whois/O1-whois-transitive/O1-infra-corroboration/O2/O3/O4/O7/D1/O5/O6/O8-saas/O9-first-party-install/O10-model-consistency/O11-third-party-form-provider/O12-third-party-provider-page의 우선순위와 safe/danger 충돌 규칙 유지 |
 | FR-017 | danger verdict는 사용자 의도가 있는 활성 탭에서 `warning.html`로 가로채야 한다. | `navigation`/`popup`/`action`/`download-silent-ok` danger는 `tabId`가 있을 때 warning URL로 이동. 현재 `action` source는 예약값이며 기본 popup 구성에서는 직접 발생하지 않음 |
 | FR-018 | popup source는 OS 알림을 만들지 않아야 한다. | popup UI가 자체 결과 표시, blur-close 방지 |
 | FR-019 | host allowlist는 `chrome.storage.local.allowlistHosts`에 평문 host로 저장되어야 한다. | allowlist hit는 scan short-circuit |
@@ -147,6 +149,9 @@ flowchart TD
 | FR-033 | 회귀 테스트는 사용자 환경에 의존하는 신호 (O5 personal trust = bookmarks/history/topSites) 를 결정론적으로 우회할 수 있어야 한다. | `chrome.runtime.sendMessage({ type: "scan", url, bypassCache: true, bypassUserTrust: true })` 형태로 `bypassUserTrust` 플래그 송신. `onMessage` 의 `scan` 핸들러가 meta 로 전파, `scanUrl` → `applyOverrides` 로 같이 흐름. `applyOverrides` 의 `O5` 가드가 `meta.bypassUserTrust === true` 면 룰 전체 skip. allowlist / verdict cache / safeHosts / denylist 우회는 기존 `bypassCache: true` 가 담당하므로 두 플래그가 직교적이다. 정상 사용자 흐름은 두 플래그 모두 false 가 기본값이라 영향 없음. 회귀 콘솔 스니펫 (popup.html 탭에서 실행) 이 fixture_manifest.json 의 각 URL 에 두 플래그를 같이 보내 fixture 의 maxScore/expectedPhishing 검증. **추가로 `bypassUserTrust=true` 스캔은 `finalizeVerdict` 에서 denylist 에 쓰지 않는다 — 실패한 fixture 가 영구 denylist 에 등록되면 D1 이 이후 모든 스캔을 phishing 으로 고정해 회귀가 비멱등이 되는 self-poisoning 을 차단(FR-020 의 denylist write 는 정상 사용자 흐름에서만). 회귀 러너(`eval/run_regression.js`)는 시작 시 `resetHistory` 로 기존 오염을 1회 비운다.** |
 | FR-034 | WHOIS 의 Name Server / Contact 이메일 도메인은 보조 ownership 신호로 활용하되, 단독으로 safe 처리하지 않는다. | `applyOverrides` 의 `O1-infra-corroboration` 룰. `extractInfraDomains(whois)` 가 `Name Server:` 호스트 + `Contact:`(및 기타) 이메일 도메인을 파싱. 다음 **네 조건을 모두** 충족할 때만 `phishing=false, score ≤ 3` cap: (1) 방문 호스트가 free/shared-hosting(`FREE_HOSTING_RE`) 아님 (2) hard evidence(danger override: O2/O3/O4/O7/D1/O0) 없음 (3) 페이지 title/visibleText/anchors 에 어떤 OFFICIAL_DOMAINS 브랜드 키(모회사 포함, 예 `SK플래닛`)가 명시됨 (4) NS/Contact 도메인이 그 브랜드 공식 도메인과 매칭(suffix). Registrant/IssuerOrg 매칭(O1-whois)은 그대로 유지하고 NS/Contact 는 이 별도 룰로 분리. 소유권 주장이 아니라 weak FP cap 이므로 `DOMAIN_TRUST_RULES` 제외(세션/영구 trust 안 굳힘, 매 스캔 재평가). danger 를 뒤집지 않음 — hard evidence 가 cap 위에서 우선. 예: `ogog.kr` 의 `ns1.skplanet.com`/`domain_skp@skplanet.com` + 페이지에 SK플래닛 명시 시 발화(단, ogog 자체는 OFFICIAL_DOMAINS 직접 등재로 O1-safe 가 먼저 처리). |
 | FR-035 | 페이지 추출(`content_extract.js`)은 보안적으로 의미 있는 입력/제출 표면과 일반 UI 버튼을 구분하고, 컨트롤에 accessible label 을 포함해야 한다. | FORMS = form/input/textarea/select + credential·PII·submit 버튼(라벨이 `CREDENTIAL_CTRL_RE` 매칭). UI_CONTROLS = 라벨 있는 일반 버튼(네비/팔로우/카테고리 등) 최대 10, 저신호 슬라이스(priority 4.5, 토큰 압박 시 조기 drop). **라벨 없는 버튼 더미(`<button type="button">`)는 FORMS/UI 양쪽에서 제외** — LLM 입력 오염 방지. 각 컨트롤은 `aria-label`→`aria-labelledby`→`<label for>`→감싸는 `<label>`→자기 텍스트(button)→`title`/`placeholder` 순으로 label 추출해 `label="..."` 로 직렬화. prompt 섹션 분리(FORMS/UI_CONTROLS/TEXT)로 LLM 이 일반 UI 버튼을 credential form 으로 오해하지 않게 한다. 근거: 라벨 없는 버튼 더미가 정상 커뮤니티/리워드 페이지를 "버튼 많은 로그인/보상 페이지"로 보이게 해 FP 유발(ogog 회귀). |
+| FR-036 | `OFFICIAL_DOMAINS`는 무한 allowlist가 아니라 고위험 브랜드 anchor로 제한하고, 일반 개발자 설치 명령 FP는 컨텍스트 룰로 완화해야 한다. | `O9-first-party-install`: LLM brand 토큰이 등록 도메인 SLD와 정확히 일치하고, `pre/code`에서 추출된 단순 `curl/wget https://... \| sh/bash/zsh` 명령의 URL도 같은 등록 도메인에 있으며, target path가 installer script 형태(`install.sh`, `setup`, `bootstrap` 등)이고 페이지가 설치/다운로드 + 개발자/OS 문맥일 때만 score ≤ 3 cap. free/shared hosting·known-brand mismatch·클립보드 shell payload·난독화(`eval/base64/tr/$()` 등)·captcha/verification lure·credential form·auto-download·dangerous URI·phishing-kit marker가 있으면 발화 금지. `DOMAIN_TRUST_RULES` 제외 — 세션 신뢰로 굳히지 않고 매 스캔 재평가. 예: `ollama.com/download`의 first-party `install.sh` 안내는 정상 설치 UX로 cap, `ollama-download.pages.dev` 또는 cross-origin/obfuscated/copy-to-clipboard 페이로드는 cap 금지. |
+| FR-037 | LLM verdict의 boolean/reason/score 자기모순은 hard evidence가 없을 때 일관되게 보정해야 한다. | `O10-model-consistency`: `phishing=false`, `suspicious_domain=false`, reason 이 `legitimate/authentic/no phishing indicators/정상/피싱 징후 없음` 계열인데 score만 7 이상이고, credential form·clipboard shell·auto-download·dangerous URI·phishing-kit marker·obfuscated curl pipe가 모두 없으면 score ≤ 3 cap. danger override가 있으면 발화 금지. 예: `howcare.co.kr`에서 정상 사유 + score 8 모순을 safe로 보정. |
+| FR-038 | cross-domain form POST는 피싱 근거가 아니라 context-expansion 신호로 분리해야 한다. | `content_extract.js` 는 현재 DOM form의 `crossDomainForms[]` 에 action origin/path, source/target registered domain, method, field names, hidden field names, query param names만 저장한다(값 저장 금지). hidden scan tab에서는 `webRequest.onBeforeRequest`로 main/sub-frame POST navigation의 필드명만 추가 기록해, 자동 POST 이후 최종 DOM만 남아도 원래 source→target 관계를 복구한다. `CROSS_DOMAIN_FORMS` prompt slice는 provider role을 별도 표시한다. `O11-third-party-form-provider`: 대상이 공인 third-party provider rule(endpoint/path + 파라미터 시그니처)에 맞고, source가 free/shared hosting이 아니며, URL/텍스트/폼 맥락이 인증·결제·OAuth 흐름과 자연스럽고, credential form·clipboard shell·auto-download·dangerous URI·phishing-kit marker·obfuscated curl pipe·직접 민감 입력 필드가 없을 때만 score ≤ 3 cap. 첫 rule은 KCB ok-name `safe.ok-name.co.kr/CommonSvl` + `cp_cd`/`mdl_tkn`/`tc`/`target_id` 중 2개 이상 매칭. provider 도메인 단독 allowlist 금지, `DOMAIN_TRUST_RULES` 제외. |
 
 ## 7. 비기능 요구사항
 
@@ -178,6 +183,10 @@ flowchart TD
 | O5 | safe | 사용자 bookmark/history/topSites 신뢰 도메인 | score <= 3, danger 없을 때만 (회귀 모드 `bypassUserTrust` 시 skip) |
 | O6 | safe | 국내 인기 도메인 | score <= 3, danger 없을 때만 |
 | O8-saas | safe | 멀티테넌트 SaaS 플랫폼(`SHARED_SAAS_RE`: sharepoint.com/onedrive.live.com/dropbox.com/box.com 등) | score <= 3, danger 없을 때만. 브랜드 소유권 미주장(DOMAIN_TRUST_RULES 제외 — 세션/영구 trust 안 굳힘, 매 스캔 재평가) |
+| O9-first-party-install | safe | unknown brand token == registered-domain SLD + `pre/code` 내 simple same-registered-domain HTTPS `curl/wget ... \| sh/bash/zsh` installer command + 설치/다운로드 문맥 + hard evidence 없음 | score <= 3 (FR-036). `OFFICIAL_DOMAINS` 미등재 개발자 도구 FP 완화. DOMAIN_TRUST_RULES 제외 |
+| O10-model-consistency | safe | `phishing=false` + `suspicious_domain=false` + benign reason + score >= 7 + hard evidence 없음 | score <= 3 (FR-037). 모델 자기모순 보정. DOMAIN_TRUST_RULES 제외 |
+| O11-third-party-form-provider | safe | cross-domain form target이 공인 provider endpoint/parameter signature와 매칭 + 인증/결제/OAuth 맥락 + hard evidence/직접 민감 입력 없음 | score <= 3 (FR-038). cross-domain POST 단독 오탐 완화. DOMAIN_TRUST_RULES 제외 |
+| O12-third-party-provider-page | safe | 현재 URL 자체가 공인 provider page + hard evidence/직접 민감 입력 없음 | score <= 3 (FR-038). source brand를 provider page 도메인 mismatch에 사용하지 않음. DOMAIN_TRUST_RULES 제외 |
 
 ## 8.1 공유 SaaS / 파일 호스팅 신뢰 모델
 
@@ -219,6 +228,7 @@ Microsoft 365 SharePoint/OneDrive, Dropbox, Google Drive 같은 파일 호스팅
 | `chrome.storage.session` | `lastVerdict` | verdict 상세 fallback |
 | `chrome.storage.session` | `rdap:<domain>`, `cert:<host>` | 소유권 조회 캐시 |
 | `chrome.storage.session` | `safeHosts` | exact-host 세션 trust, 6시간 TTL |
+| `chrome.storage.session` | `clickGuardWarnApprovals` | click guard warn 확인을 누른 exact URL hash, 6시간 TTL. 재확인 생략 전용이며 스캔/allowlist 우회 아님 |
 | `chrome.storage.local` | `phishingDenylist` | host sha256 배열 |
 | `chrome.storage.local` | `allowlistHosts` | 사용자 허용 host 배열 |
 | `chrome.storage.local` | `lang` | `en` 또는 `ko` |
@@ -247,7 +257,7 @@ Microsoft 365 SharePoint/OneDrive, Dropbox, Google Drive 같은 파일 호스팅
 | TEST-008 | warning 페이지 rescan/allow/back | reset 범위, allowlist short-circuit, closeTab |
 | TEST-009 | 언어 toggle | popup/warning/verdict/notification i18n |
 | TEST-010 | 동일 URL 동시 trigger | single-flight와 중복 알림 방지 |
-| TEST-011 | popup 콘솔에서 `eval/run_regression.js` 인젝션 → `fixture_manifest.json` 전체 케이스 일괄 검증 | 회귀 검증, PASS/FAIL 보고. 현재 manifest는 15 케이스이며, 새 케이스 추가는 manifest 만 수정 |
+| TEST-011 | popup 콘솔에서 `eval/run_regression.js` 인젝션 → `fixture_manifest.json` 전체 케이스 일괄 검증 | 회귀 검증, PASS/FAIL 보고. 현재 manifest는 22 케이스이며, 새 케이스 추가는 manifest 만 수정 |
 | TEST-012 | popup 콘솔에서 `eval/run_spof.js` 인젝션 → `__spof_runAll()` 또는 `__spof_TNX/TIP/TALLDOWN/TSLOW` 개별 | SPOF 시나리오 (DNS 실패 / IP-only / 모든 fetch 차단 / 느린 로딩) — 외부 의존성 실패 시 verdict 손실 없음 검증 |
 | TEST-013 | SW 콘솔에서 `eval/spof_sw_helpers.js` 인젝션 → `__spof.blockAllFetch()` 후 popup `__spof_TALLDOWN()` | 보조 fetch 실패 상황에서 scan verdict가 손실되지 않는지 확인. 끝나고 `__spof.restore()` 로 원복. notification reject 격리는 별도 강제 실패 테스트가 필요 |
 | TEST-014 | SharePoint/OneDrive SaaS fixture 세트 | `source=waffle` 단독 FP 방지, `*.sharepoint.com` 전역 safe 금지, 조직 exact tenant policy 적용 시에도 hard evidence/외부 redirect가 danger로 우선하는지 검증 |

@@ -127,6 +127,10 @@
       "bg.override.O5.personalTrust": "User-trusted domain (bookmarks / history / top sites): {0}",
       "bg.override.O6.popularKr":     "Popular ranked domain: {0}",
       "bg.override.O8.sharedSaas":    "Multi-tenant SaaS platform ({0}); platform WHOIS doesn't prove tenant content is malicious. No hard evidence found.",
+      "bg.override.O9.firstPartyInstall": "First-party developer install command: brand '{0}' matches the registered domain ({1}) and the command URL stays on that domain. No hard evidence found.",
+      "bg.override.O10.modelConsistency": "Model output was internally inconsistent: phishing=false and the reason says no phishing indicators, but score was high. No hard evidence found.",
+      "bg.override.O11.thirdPartyFormProvider": "Cross-domain form targets recognized third-party provider {0} ({1}); provider POST alone is not phishing evidence. No hard evidence found.",
+      "bg.override.O12.thirdPartyProviderPage": "Recognized third-party provider page: {0} ({1}). Do not apply source-brand domain mismatch. No hard evidence found.",
       "bg.override.O1infra.match":    "Infrastructure corroboration: WHOIS name server / contact ({1}) matches official domain of '{0}', which the page also identifies. No hard evidence.",
 
       // compat-check page (EN)
@@ -326,6 +330,10 @@
       "bg.override.O5.personalTrust": "사용자 신뢰 도메인 (즐겨찾기/방문기록/TopSites): {0}",
       "bg.override.O6.popularKr":     "공개 랭킹 인기 도메인: {0}",
       "bg.override.O8.sharedSaas":    "멀티테넌트 SaaS 플랫폼({0}) — 플랫폼 WHOIS는 테넌트 콘텐츠 악성 여부를 증명하지 않음. hard evidence 없음.",
+      "bg.override.O9.firstPartyInstall": "first-party 개발자 설치 명령: 브랜드 '{0}' 가 등록 도메인({1})과 일치하고 명령 URL도 같은 도메인에 있음. hard evidence 없음.",
+      "bg.override.O10.modelConsistency": "모델 출력 자기모순: phishing=false 이고 사유도 피싱 징후 없음인데 점수만 높음. hard evidence 없음.",
+      "bg.override.O11.thirdPartyFormProvider": "cross-domain form 이 공인 제3자 provider {0}({1}) 로 향함 — provider POST 단독은 피싱 근거가 아님. hard evidence 없음.",
+      "bg.override.O12.thirdPartyProviderPage": "공인 제3자 provider 페이지: {0}({1}). source brand 도메인 불일치로 보지 않음. hard evidence 없음.",
       "bg.override.O1infra.match":    "인프라 보강 증거: WHOIS 네임서버/연락처({1})가 '{0}' 공식 도메인과 일치하고 페이지에도 해당 브랜드 명시. hard evidence 없음.",
 
       // compat-check page (KO)

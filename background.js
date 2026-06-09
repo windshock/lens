@@ -25,6 +25,7 @@ Critical signals (treat as strong evidence of phishing):
 - BEHAVIORS.autoDownloads non-empty — page tried to auto-download a file on load; almost always malicious unless context is a legitimate file-distribution site.
 - BEHAVIORS.dangerousUris non-empty — links with applescript://, ms-msdt://, shell:, vbscript: schemes are direct code-execution vectors.
 - BEHAVIORS.shellHits combined with BEHAVIORS.socialHits can be a ClickFix pattern ONLY when the page is instructing users to paste/run commands (e.g., "Win+R", "Run", "paste into Terminal/PowerShell") and/or when clipboardWrites contains a shell payload. Mere presence of shell commands in developer documentation is NOT phishing by itself.
+- First-party developer install instructions such as \`curl https://same-registered-domain/.../install.sh | sh\` shown in docs/code blocks are NOT malicious by themselves. Treat them as risky only when combined with clipboard writes, obfuscation, captcha/verification lures, cross-origin command URLs, brand-domain mismatch, free hosting, auto-downloads, dangerous URI schemes, or credential collection.
 - Brand impersonation on hosting subdomains: if the page mimics brand X but is on workers.dev/pages.dev/vercel.app/netlify.app/etc. — assume phishing unless explicit demo disclaimer.
 - BEHAVIORS.phishingKitMarkers non-empty — concrete phishing-kit fingerprints found in inline scripts: \`clearbit-logo\` (logo.clearbit.com fetched dynamically by victim email domain), \`screenshotmachine\` (victim company homepage used as blurred background), \`atob-url:\` (base64-decoded credential-exfil endpoint), or messaging/webhook exfil markers such as Telegram, Discord, or webhook.site endpoints. Treat these as strong evidence when combined with a credential form, hidden/prefilled account, brand impersonation, or off-origin collection path.
 
@@ -36,6 +37,9 @@ Limitations:
 - HTML may be shortened and simplified.
 - OCR-extracted text may be inaccurate or gibberish.
 - The Korean top-level domain (.kr) is NOT suspicious by itself.
+- In Korean identity flows, URL tokens like pass, pass-popup, and sign-pass often mean PASS mobile identity verification, not password reset.
+- A cross-domain form POST is NOT suspicious by itself when CROSS_DOMAIN_FORMS identifies a known identity verification, payment, or OAuth provider and no hard evidence is present.
+- If PROVIDER_PAGE_CONTEXT says the current URL is a recognized third-party provider page, do not compare it against an inherited/source brand for domain mismatch.
 - Internal development or testing environments are NOT suspicious.`;
 
 const VERDICT_SCHEMA = {
@@ -189,6 +193,21 @@ const FREE_HOSTING_RE = /(?:^|\.)(?:workers\.dev|pages\.dev|vercel\.app|netlify\
 // LLM 의 약신호 단독 격상(login page·many buttons·brand mention 등)은 결정론적으로 cap 한다(O8).
 const SHARED_SAAS_RE = /(?:^|\.)(?:sharepoint\.com|onedrive\.live\.com|dropbox\.com|dropboxusercontent\.com|box\.com|app\.box\.com)$/i;
 
+// 공인 제3자 인증/결제 provider 로 향하는 cross-domain form 은 "추가 맥락"이지
+// 그 자체로 피싱 근거가 아니다. 단 provider 도메인만으로 safe 처리하면 오용될 수 있으므로
+// endpoint/path + 연동 파라미터 시그니처까지 같이 요구한다.
+const THIRD_PARTY_FORM_PROVIDER_RULES = [
+  {
+    domain: "ok-name.co.kr",
+    provider: "KCB ok-name",
+    type: "identity_verification",
+    pathRe: /^\/CommonSvl\/?$/i,
+    methodRe: /^post$/i,
+    fieldNames: ["tc", "cp_cd", "mdl_tkn", "target_id"],
+    minFieldHits: 2
+  }
+];
+
 // 공개 랭킹(Cloudflare Radar KR / Tranco) 기반 한국 인기 도메인 목록.
 // OFFICIAL_DOMAINS와 달리 LLM의 브랜드 인식 없이도 도메인 직접 매칭으로 동작.
 // 업데이트: Cloudflare Radar https://radar.cloudflare.com/domains 에서 KR 필터 후 갱신.
@@ -261,6 +280,7 @@ const TAB_LOAD_TIMEOUT_MS = 8000;
 const NAVIGATION_SCAN_COOLDOWN_MS = 60_000;
 const PROMPT_OUTPUT_RESERVE = 512;
 const SESSION_TRUST_TTL_MS = 6 * 60 * 60 * 1000;
+const CLICK_GUARD_WARN_APPROVAL_TTL_MS = 6 * 60 * 60 * 1000;
 
 let _session = null;
 let _availability = null;
@@ -298,37 +318,7 @@ async function ensureSession() {
   if (_sessionPromise) return _sessionPromise;
 
   _sessionPromise = (async () => {
-    const a = await checkAvailability();
-    if (a === "unavailable") throw new Error("Gemini Nano 사용 불가");
-
-    _modelError = null;
-    if (a === "downloadable" || a === "downloading") {
-      _availability = "downloading";
-      _downloadProgress = { loaded: 0, total: 1 };
-      await applyBadgeState(_availability);
-    }
-
-    const session = await LanguageModel.create({
-      initialPrompts: [{ role: "system", content: SYS }],
-      temperature: 0,
-      topK: 1,
-      // Chrome 138+ 는 outputLanguage 미지정 시 콘솔 경고 + safety attestation
-      // 요구. prompt() 마다 동일 값을 다시 넘기고 있지만 session-level 에서도
-      // 명시해 둔다. 지원 코드: [en, es, ja].
-      outputLanguage: "en",
-      monitor(m) {
-        m.addEventListener("downloadprogress", e => {
-          _availability = "downloading";
-          _downloadProgress = {
-            loaded: typeof e.loaded === "number" ? e.loaded : 0,
-            total: typeof e.total === "number" ? e.total : 1
-          };
-          console.log(`LM download: ${e.loaded}/${e.total}`);
-          applyBadgeState(_availability).catch(() => {});
-        });
-      }
-    });
-
+    const session = await createLanguageModelSession();
     _session = session;
     _availability = "available";
     _downloadProgress = null;
@@ -346,6 +336,50 @@ async function ensureSession() {
     await updateBadge();
     throw e;
   }
+}
+
+async function createLanguageModelSession() {
+  const a = await checkAvailability();
+  if (a === "unavailable") throw new Error("Gemini Nano 사용 불가");
+
+  _modelError = null;
+  if (a === "downloadable" || a === "downloading") {
+    _availability = "downloading";
+    _downloadProgress = { loaded: 0, total: 1 };
+    await applyBadgeState(_availability);
+  }
+
+  const session = await LanguageModel.create({
+    initialPrompts: [{ role: "system", content: SYS }],
+    temperature: 0,
+    topK: 1,
+    // Chrome 138+ 는 outputLanguage 미지정 시 콘솔 경고 + safety attestation
+    // 요구. prompt() 마다 동일 값을 다시 넘기고 있지만 session-level 에서도
+    // 명시해 둔다. 지원 코드: [en, es, ja].
+    outputLanguage: "en",
+    monitor(m) {
+      m.addEventListener("downloadprogress", e => {
+        _availability = "downloading";
+        _downloadProgress = {
+          loaded: typeof e.loaded === "number" ? e.loaded : 0,
+          total: typeof e.total === "number" ? e.total : 1
+        };
+        console.log(`LM download: ${e.loaded}/${e.total}`);
+        applyBadgeState(_availability).catch(() => {});
+      });
+    }
+  });
+
+  _availability = "available";
+  _downloadProgress = null;
+  await applyBadgeState(_availability);
+  return session;
+}
+
+async function destroyLanguageModelSession(session) {
+  try {
+    if (session && typeof session.destroy === "function") session.destroy();
+  } catch {}
 }
 
 async function applyBadgeState(a) {
@@ -432,6 +466,15 @@ async function addToDenylist(host) {
   await chrome.storage.local.set({ phishingDenylist: [...set] });
   console.log("denylist += host (hash:", h.slice(0, 12) + "…)");
 }
+async function removeFromDenylist(host) {
+  if (!host) return false;
+  const h = await sha256Hex(host.toLowerCase());
+  const set = await loadDenylist();
+  if (!set.delete(h)) return false;
+  await chrome.storage.local.set({ phishingDenylist: [...set] });
+  console.log("denylist -= host (hash:", h.slice(0, 12) + "…)");
+  return true;
+}
 
 // ───────────────────────── 영구 allowlist (host 단위) ─────────────────────────
 // 사용자가 warning.html 또는 verdict.html 에서 "허용" 한 호스트를 chrome.storage.local 에
@@ -474,6 +517,52 @@ function registeredDomain(url) {
     if (parts.length >= 3 && twoLevelTld.has(last2)) return last3;
     return last2;
   } catch { return null; }
+}
+
+function providerRuleMatchesHost(rule, host, domain) {
+  const h = String(host || "").toLowerCase();
+  const d = String(domain || "").toLowerCase();
+  return d === rule.domain || h === rule.domain || h.endsWith("." + rule.domain);
+}
+
+function classifyThirdPartyProviderUrl(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+    const domain = registeredDomain(u.href);
+    const path = u.pathname || "/";
+    for (const rule of THIRD_PARTY_FORM_PROVIDER_RULES) {
+      if (!providerRuleMatchesHost(rule, host, domain)) continue;
+      const pathMatched = !rule.pathRe || rule.pathRe.test(path);
+      return {
+        provider: rule.provider,
+        type: rule.type,
+        matchedDomain: rule.domain,
+        host,
+        path,
+        pathMatched,
+        brand: rule.type === "identity_verification" ? `${rule.provider} / PASS` : rule.provider
+      };
+    }
+  } catch {}
+  return null;
+}
+
+function classifyThirdPartyProviderPage(url, extracted) {
+  const info = classifyThirdPartyProviderUrl(extracted?.finalUrl || url);
+  if (!info) return null;
+  if (info.pathMatched) return info;
+
+  const hay = [
+    extracted?.title || "",
+    (extracted?.visibleText || "").slice(0, 6000),
+    (extracted?.forms || []).join(" "),
+    (extracted?.anchors || []).join(" ")
+  ].join("\n").normalize("NFC");
+  if (info.type === "identity_verification" && /(?:\bPASS\b|KCB|ok-?name|본인\s?인증|본인\s?확인|휴대폰\s?인증|휴대폰\s?본인|통신사|인증)/i.test(hay)) {
+    return info;
+  }
+  return null;
 }
 
 // RFC1918 IPv4 (10/8, 172.16/12, 192.168/16) + loopback (127/8) + link-local (169.254/16)
@@ -705,11 +794,101 @@ function formatBehaviors(b) {
   return lines.join("\n");
 }
 
+function normalizeNameList(names) {
+  return (Array.isArray(names) ? names : [])
+    .map(n => String(n || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function classifyThirdPartyFormProvider(form) {
+  if (!form?.targetHost && !form?.targetDomain) return null;
+  const targetHost = String(form.targetHost || "").toLowerCase();
+  const targetDomain = String(form.targetDomain || "").toLowerCase();
+  const targetPath = String(form.targetPath || "");
+  const method = String(form.method || "get").toLowerCase();
+  const names = new Set([
+    ...normalizeNameList(form.fieldNames),
+    ...normalizeNameList(form.hiddenFieldNames),
+    ...normalizeNameList(form.queryParamNames)
+  ]);
+
+  for (const rule of THIRD_PARTY_FORM_PROVIDER_RULES) {
+    const hostMatches = targetDomain === rule.domain || targetHost === rule.domain || targetHost.endsWith("." + rule.domain);
+    if (!hostMatches) continue;
+    if (rule.pathRe && !rule.pathRe.test(targetPath)) continue;
+    if (rule.methodRe && !rule.methodRe.test(method)) continue;
+    const hits = rule.fieldNames.filter(n => names.has(n.toLowerCase()));
+    if (hits.length < (rule.minFieldHits || 1)) continue;
+    return {
+      provider: rule.provider,
+      type: rule.type,
+      matchedDomain: rule.domain,
+      matchedFields: hits
+    };
+  }
+  return null;
+}
+
+function formatCrossDomainForms(forms) {
+  if (!Array.isArray(forms) || forms.length === 0) return "";
+  const lines = [];
+  for (const form of forms.slice(0, 8)) {
+    const role = classifyThirdPartyFormProvider(form);
+    const bits = [
+      `${form.sourceDomain || form.sourceHost || "source"} -> ${form.targetHost || form.targetDomain || "target"}${form.targetPath || ""}`,
+      `method=${form.method || "get"}`
+    ];
+    if (role) {
+      bits.push(`role=third_party_${role.type}`);
+      bits.push(`provider=${role.provider}`);
+      bits.push(`matchedFields=${role.matchedFields.join(",")}`);
+      bits.push("target_provider_recognized=true");
+      bits.push("field_signature_matched=true");
+      bits.push("treat_cross_domain_as_phishing_evidence=false");
+      bits.push("score_cap_without_hard_evidence=3");
+      if (role.type === "identity_verification") {
+        bits.push("pass_token_interpretation=PASS_mobile_identity_verification_not_password_reset");
+      }
+    }
+    const fields = normalizeNameList(form.fieldNames).slice(0, 12);
+    const hidden = normalizeNameList(form.hiddenFieldNames).slice(0, 12);
+    if (fields.length) bits.push(`fields=${fields.join(",")}`);
+    if (hidden.length) bits.push(`hidden=${hidden.join(",")}`);
+    lines.push("- " + bits.join(" "));
+  }
+  if (lines.some(line => /role=third_party_/.test(line))) {
+    lines.push("Decision rule: recognized third-party identity/payment/OAuth provider POST must not be used as phishing evidence without hard evidence.");
+  }
+  return lines.join("\n");
+}
+
+function formatProviderPageContext(url, extracted) {
+  const info = classifyThirdPartyProviderPage(url, extracted);
+  if (!info) return "";
+  return [
+    `analysis_subject=target_provider_page`,
+    `current_domain_role=third_party_${info.type}_provider`,
+    `current_brand=${info.brand}`,
+    `provider=${info.provider}`,
+    `provider_host=${info.host}`,
+    `provider_path=${info.path}`,
+    `provider_recognized=true`,
+    `inherited_source_brand_should_not_be_used_for_domain_mismatch=true`,
+    `treat_provider_domain_as_suspicious=false`,
+    `score_cap_without_hard_evidence=3`,
+    info.type === "identity_verification"
+      ? "pass_token_interpretation=PASS_mobile_identity_verification_not_password_reset"
+      : ""
+  ].filter(Boolean).join("\n");
+}
+
 function buildPromptSlices(url, ocr, whois, extracted) {
   return [
     { key: "URL",       value: clamp(url, 500),                                       priority: 1 },
+    { key: "PROVIDER_PAGE_CONTEXT", value: clamp(formatProviderPageContext(url, extracted), 800), priority: 1.8 },
     { key: "WHOIS",     value: clamp(whois, 600),                                     priority: 2 },
     { key: "BEHAVIORS", value: clamp(formatBehaviors(extracted.behaviors), 1500),     priority: 2.5 },
+    { key: "CROSS_DOMAIN_FORMS", value: clamp(formatCrossDomainForms(extracted.crossDomainForms), 1000), priority: 2.8 },
     { key: "FORMS",     value: joinAndCap(extracted.forms || [], 500),                priority: 3 },
     { key: "UI_CONTROLS", value: joinAndCap(extracted.uiControls || [], 300),          priority: 4.5 },
     { key: "LINKS",     value: joinAndCap(extracted.anchors || [], 800),              priority: 4 },
@@ -767,10 +946,88 @@ function waitForTabComplete(tabId) {
   });
 }
 
-// 스캔 중 탭들 — chrome.downloads.onCreated 가 이 탭에서 시작된 다운로드를
-// 자동 다운로드 시그널로 기록하고 즉시 취소하기 위해 사용.
-const scanningTabs = new Map(); // tabId → { autoDownloads:[] }
+// 스캔 중 탭들 — chrome.downloads.onCreated / webRequest 가 이 탭에서 발생한 자동 다운로드와
+// main-frame POST navigation 의 구조화 필드명을 기록하기 위해 사용한다.
+const scanningTabs = new Map(); // tabId → { autoDownloads:[], postForms:[], initialUrl }
 const navigationScans = new Map(); // tabId → { url, at }
+
+function postFieldNamesFromRequestBody(body) {
+  const formData = body?.formData;
+  if (!formData || typeof formData !== "object") return [];
+  return Object.keys(formData)
+    .map(k => String(k || "").trim())
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
+function crossDomainPostFormFromRequest(details, state) {
+  if (!details || String(details.method || "").toUpperCase() !== "POST") return null;
+  const sourceUrl = details.initiator || details.originUrl || details.documentUrl || state?.initialUrl || "";
+  let source, target;
+  try { source = new URL(sourceUrl); } catch { return null; }
+  try { target = new URL(details.url); } catch { return null; }
+  if (!/^https?:$/i.test(target.protocol)) return null;
+
+  const sourceHost = source.hostname.toLowerCase();
+  const targetHost = target.hostname.toLowerCase();
+  const sourceDomain = registeredDomain(source.href);
+  const targetDomain = registeredDomain(target.href);
+  if (!sourceDomain || !targetDomain || sourceDomain === targetDomain) return null;
+
+  const fieldNames = postFieldNamesFromRequestBody(details.requestBody);
+  return {
+    action: target.origin + target.pathname,
+    method: "post",
+    sourceHost,
+    sourceDomain,
+    targetHost,
+    targetDomain,
+    targetPath: target.pathname.slice(0, 160),
+    queryParamNames: [...target.searchParams.keys()].map(k => String(k).slice(0, 80)).slice(0, 20),
+    fieldNames,
+    hiddenFieldNames: fieldNames,
+    observedBy: "webRequest.postNavigation"
+  };
+}
+
+function mergeCrossDomainForms(existing, observed) {
+  const out = [];
+  const seen = new Set();
+  for (const form of [...(existing || []), ...(observed || [])]) {
+    if (!form) continue;
+    const key = [
+      form.sourceDomain || form.sourceHost || "",
+      form.targetDomain || form.targetHost || "",
+      form.targetPath || "",
+      form.method || "",
+      normalizeNameList(form.fieldNames).join(",")
+    ].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(form);
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
+if (chrome.webRequest?.onBeforeRequest) {
+  try {
+    chrome.webRequest.onBeforeRequest.addListener(
+      details => {
+        const state = scanningTabs.get(details.tabId);
+        if (!state) return;
+        if (details.type !== "main_frame" && details.type !== "sub_frame") return;
+        const form = crossDomainPostFormFromRequest(details, state);
+        if (!form) return;
+        state.postForms = mergeCrossDomainForms(state.postForms || [], [form]).slice(-8);
+      },
+      { urls: ["<all_urls>"] },
+      ["requestBody"]
+    );
+  } catch (e) {
+    console.warn("webRequest POST capture unavailable:", e);
+  }
+}
 
 async function extractFromUrl(url, source, meta) {
   // 1. 활성 탭 주입 (navigation, popup, download) - 스크롤/클릭 봇 동작 없이 조용히 추출
@@ -813,7 +1070,7 @@ async function extractFromHiddenTab(url) {
   // 마커는 hash이므로 서버에 전송 안 됨, 페이지 콘텐츠에 영향 없음.
   const scanUrl = url + (url.includes("#") ? "&" : "#") + "__pg_scan=1";
   const tab = await chrome.tabs.create({ url: scanUrl, active: false });
-  scanningTabs.set(tab.id, { autoDownloads: [] });
+  scanningTabs.set(tab.id, { autoDownloads: [], postForms: [], initialUrl: url });
   try {
     // MAIN-world clipboard hook 을 가능한 빨리 inject.
     try {
@@ -908,6 +1165,7 @@ async function extractFromHiddenTab(url) {
       const sigs = scanningTabs.get(tab.id);
       extracted.behaviors = extracted.behaviors || {};
       extracted.behaviors.autoDownloads = sigs?.autoDownloads || [];
+      extracted.crossDomainForms = mergeCrossDomainForms(extracted.crossDomainForms || [], sigs?.postForms || []);
     }
     return extracted;
   } finally {
@@ -996,6 +1254,43 @@ async function rememberSessionTrustedHost(url, sourceRule) {
   live.push({ host, source: sourceRule, expiresAt: now + SESSION_TRUST_TTL_MS });
   await chrome.storage.session.set({ safeHosts: live });
   console.log("safeHosts added:", host, "source:", sourceRule, "(total", live.length, ")");
+}
+
+async function getClickGuardWarnApproval(url) {
+  if (!url || !/^https?:/i.test(url)) return null;
+  const urlHash = await sha256Hex(url);
+  const now = Date.now();
+  const { clickGuardWarnApprovals = [] } = await chrome.storage.session.get("clickGuardWarnApprovals");
+  const live = clickGuardWarnApprovals
+    .filter(e => e && e.urlHash && e.expiresAt > now)
+    .slice(-200);
+  if (live.length !== clickGuardWarnApprovals.length) {
+    await chrome.storage.session.set({ clickGuardWarnApprovals: live });
+  }
+  return live.find(e => e.urlHash === urlHash) || null;
+}
+
+async function rememberClickGuardWarnApproval(url, score) {
+  if (!url || !/^https?:/i.test(url)) return { ok: false, error: "invalid_url" };
+  const host = hostFromUrl(url);
+  if (!host) return { ok: false, error: "empty_host" };
+  const now = Date.now();
+  const urlHash = await sha256Hex(url);
+  const { clickGuardWarnApprovals = [] } = await chrome.storage.session.get("clickGuardWarnApprovals");
+  const live = clickGuardWarnApprovals
+    .filter(e => e && e.urlHash && e.expiresAt > now && e.urlHash !== urlHash)
+    .slice(-199);
+  const entry = {
+    urlHash,
+    host,
+    score: Number.isFinite(score) ? score : null,
+    source: "click-guard-warn-confirm",
+    expiresAt: now + CLICK_GUARD_WARN_APPROVAL_TTL_MS
+  };
+  live.push(entry);
+  await chrome.storage.session.set({ clickGuardWarnApprovals: live });
+  console.log("clickGuardWarnApprovals added:", host, "score:", entry.score, "(total", live.length, ")");
+  return { ok: true, host, expiresAt: entry.expiresAt };
 }
 
 async function finalizeVerdict(verdict, extracted, url, key, source, meta) {
@@ -1096,7 +1391,10 @@ async function _runScan(url, source, meta, key, bypassLookup) {
     // 영구 denylist hit — LLM/추출/OCR 전부 생략하고 phishing 으로 short-circuit.
     try {
       const host = new URL(url).hostname.toLowerCase();
-      if (host && await isDenylisted(host)) {
+      const knownProviderUrl = classifyThirdPartyProviderUrl(url);
+      if (host && await isDenylisted(host) && knownProviderUrl?.pathMatched) {
+        await removeFromDenylist(host);
+      } else if (host && await isDenylisted(host)) {
         const denied = {
           phishing_score: 8, brand: null, phishing: true,
           suspicious_domain: true,
@@ -1174,14 +1472,16 @@ async function _runScan(url, source, meta, key, bypassLookup) {
     return { error: "model_download_required", availability: a };
   }
 
-  const session = await ensureSession();
-  const body = await buildPrompt(session, extracted.finalUrl || url, ocr, whois, extracted);
+  const session = await createLanguageModelSession();
   let raw;
   try {
+    const body = await buildPrompt(session, extracted.finalUrl || url, ocr, whois, extracted);
     raw = await session.prompt(body, { responseConstraint: VERDICT_SCHEMA, omitResponseConstraintInput: true, outputLanguage: "en" });
   } catch (e) {
     console.warn("LM.prompt failed:", e);
     return { error: "model_error", message: String(e) };
+  } finally {
+    await destroyLanguageModelSession(session);
   }
   let verdict;
   try { verdict = JSON.parse(raw); }
@@ -1393,6 +1693,242 @@ function hasObfuscatedCurlPipeToShell(extracted) {
   return /\bcurl\b[\s\S]{0,20000}\$\(\s*echo\b[\s\S]{0,20000}\|\s*tr\s+['"][^'"]+['"]\s+['"][^'"]+['"][\s\S]{0,20000}\)\s*\|\s*(?:bash|sh|zsh)\b/i.test(t);
 }
 
+function normalizeBrandDomainToken(s) {
+  return String(s || "")
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/\b(?:incorporated|corporation|company|corp|inc|llc|ltd|co)\b\.?/g, " ")
+    .replace(/[^a-z0-9가-힣]/g, "");
+}
+
+function brandDomainCandidates(brand) {
+  const raw = String(brand || "").normalize("NFC").toLowerCase().trim();
+  if (!raw) return [];
+  const candidates = new Set();
+  const full = normalizeBrandDomainToken(raw);
+  if (full.length >= 3) candidates.add(full);
+  const first = normalizeBrandDomainToken(raw.split(/\s+/)[0]);
+  if (first.length >= 3) candidates.add(first);
+  for (const c of [...candidates]) {
+    if (c.length > 4 && c.endsWith("ai")) candidates.add(c.slice(0, -2));
+  }
+  return [...candidates].filter(Boolean);
+}
+
+function registeredDomainLabel(url) {
+  const d = registeredDomain(url);
+  if (!d) return "";
+  return normalizeBrandDomainToken(d.split(".")[0]);
+}
+
+function brandMatchesRegisteredDomain(brand, url) {
+  const label = registeredDomainLabel(url);
+  if (!label) return false;
+  return brandDomainCandidates(brand).some(c => c === label);
+}
+
+function hasVerificationLure(extracted) {
+  const social = (extracted?.behaviors?.socialHits || []).join(" ");
+  const text = (extracted?.visibleText || "").slice(0, 8000);
+  const hay = `${social}\n${text}`;
+  return /(?:win\s*\+\s*r|⊞\s*\+?\s*r|run dialog|i\W?m\s+not\s+a\s+robot|verify\s+you\s+are\s+human|cloudflare\s+(?:verification|challenge)|보안\s*확인|script editor|스크립트\s*편집기)/i.test(hay);
+}
+
+function findSimpleFirstPartyInstallCommand(extracted, url) {
+  const finalUrl = extracted?.finalUrl || url;
+  const pageReg = registeredDomain(finalUrl);
+  if (!pageReg) return null;
+  const sources = (extracted?.behaviors?.codeSnippets || []).join("\n").slice(0, 12000);
+  if (!sources) return null;
+  const re = /\b(?:curl|wget)\b[\s\S]{0,700}?\|\s*(?:bash|sh|zsh)\b/gi;
+  let m;
+  while ((m = re.exec(sources))) {
+    const command = String(m[0] || "");
+    if (/(?:\$\(|`|;|&&|\|\||\beval\b|\bbase64\b|\btr\s+['"]|\bpowershell\b|\biex\b|\bmshta\b|\bcmd\.exe\b|\bcertutil\b|\bchmod\b|\bpython\s+-c\b|\bnode\s+-e\b)/i.test(command)) {
+      continue;
+    }
+    const urls = [...command.matchAll(/\bhttps:\/\/[^\s"'`|<>)]+/gi)].map(x => x[0]);
+    if (urls.length !== 1) continue;
+    let target;
+    try { target = new URL(urls[0]); } catch { continue; }
+    if (registeredDomain(target.href) !== pageReg) continue;
+    if (!looksLikeInstallerScriptPath(target.pathname)) continue;
+    return {
+      command: clamp(command.replace(/\s+/g, " ").trim(), 120),
+      domain: pageReg,
+      targetPath: target.pathname
+    };
+  }
+  return null;
+}
+
+function looksLikeInstallerScriptPath(pathname) {
+  const path = String(pathname || "").toLowerCase();
+  const base = path.split("/").pop() || "";
+  return (
+    /\.(?:sh|bash|zsh)$/.test(base) ||
+    /(?:^|[-_.])(?:install|setup|bootstrap)(?:[-_.]|$)/.test(base) ||
+    /(?:^|\/)(?:install|setup|bootstrap)(?:\/|$)/.test(path)
+  );
+}
+
+function hasFirstPartyInstallPageContext(extracted, url, install) {
+  const hay = [
+    url,
+    extracted?.finalUrl || "",
+    extracted?.title || "",
+    (extracted?.visibleText || "").slice(0, 5000),
+    (extracted?.anchors || []).join(" ").slice(0, 3000),
+    install?.targetPath || ""
+  ].join("\n").normalize("NFC");
+  const installContext = /(?:download|install|setup|get started|quickstart|설치|다운로드)/i.test(hay);
+  const developerContext = /(?:documentation|docs|cli|command line|terminal|macos|linux|windows|developer|문서|터미널)/i.test(hay);
+  return installContext && developerContext;
+}
+
+function firstPartyInstallCommandSafeCap(verdict, extracted, url, finalOnFree, origOnFree, finalHost) {
+  if (!verdict?.brand) return null;
+  if (lookupOfficialDomains(verdict.brand)) return null;
+  if (finalOnFree || origOnFree || (finalHost && SHARED_SAAS_RE.test(finalHost))) return null;
+  if (!brandMatchesRegisteredDomain(verdict.brand, extracted?.finalUrl || url)) return null;
+  if (hasCredentialLikeForms(extracted)) return null;
+  if (hasShellClipboardPayload(extracted)) return null;
+  if ((extracted?.behaviors?.autoDownloads || []).length > 0) return null;
+  if ((extracted?.behaviors?.dangerousUris || []).length > 0) return null;
+  if ((extracted?.behaviors?.phishingKitMarkers || []).length > 0) return null;
+  if (hasObfuscationInText(extracted)) return null;
+  if (hasVerificationLure(extracted)) return null;
+  const install = findSimpleFirstPartyInstallCommand(extracted, url);
+  if (!install) return null;
+  if (!hasFirstPartyInstallPageContext(extracted, url, install)) return null;
+  return install;
+}
+
+function modelReasonLooksBenign(reason) {
+  const r = String(reason || "").normalize("NFC").toLowerCase();
+  if (!r) return false;
+  if (/\b(?:not|isn'?t|is not|does not appear to be)\s+(?:legitimate|authentic|official)\b/.test(r)) return false;
+  if (/\b(?:fake|impersonat|credential theft|steal credentials|phishing attempt|malicious intent)\b/.test(r)) return false;
+  return (
+    /\b(?:legitimate|authentic|official)\b/.test(r) ||
+    /\bwhois\b.{0,80}\b(?:confirm|match|authentic|legitimate)\b/.test(r) ||
+    /\bno (?:clear |obvious )?(?:phishing|malicious|suspicious) (?:indicators?|signals?|evidence)\b/.test(r) ||
+    /\bnot (?:a )?(?:phishing|malicious|suspicious) (?:site|page|attempt)\b/.test(r) ||
+    /(?:정상|정식|공식|합법|진짜)\s*(?:사이트|도메인|페이지)?/.test(r) ||
+    /(?:피싱|악성|위험|의심).{0,16}(?:징후|신호|근거|증거).{0,12}(?:없|아니)/.test(r)
+  );
+}
+
+function hasHighConfidenceDangerSurface(extracted) {
+  return (
+    hasCredentialLikeForms(extracted) ||
+    hasShellClipboardPayload(extracted) ||
+    (extracted?.behaviors?.autoDownloads || []).length > 0 ||
+    (extracted?.behaviors?.dangerousUris || []).length > 0 ||
+    (extracted?.behaviors?.phishingKitMarkers || []).length > 0 ||
+    hasObfuscatedCurlPipeToShell(extracted)
+  );
+}
+
+function hasModelSafeScoreContradiction(verdict, extracted) {
+  return (
+    verdict?.phishing === false &&
+    verdict?.suspicious_domain === false &&
+    (verdict?.phishing_score ?? 0) >= 7 &&
+    modelReasonLooksBenign(verdict?.reason) &&
+    !hasHighConfidenceDangerSurface(extracted)
+  );
+}
+
+function matchedThirdPartyProviderForms(extracted) {
+  return (extracted?.crossDomainForms || [])
+    .map(form => {
+      const role = classifyThirdPartyFormProvider(form);
+      return role ? { form, ...role } : null;
+    })
+    .filter(Boolean);
+}
+
+function hasNonFormHardEvidence(extracted) {
+  return (
+    hasShellClipboardPayload(extracted) ||
+    (extracted?.behaviors?.autoDownloads || []).length > 0 ||
+    (extracted?.behaviors?.dangerousUris || []).length > 0 ||
+    (extracted?.behaviors?.phishingKitMarkers || []).length > 0 ||
+    hasObfuscatedCurlPipeToShell(extracted)
+  );
+}
+
+function hasDirectCredentialOrPaymentForms(extracted) {
+  for (const raw of (extracted?.forms || [])) {
+    const s = String(raw || "");
+    if (!s || /<input\b[^>]*\btype="hidden"/i.test(s)) continue;
+    if (/type="password"/i.test(s)) return true;
+    if (/autocomplete="current-password"/i.test(s)) return true;
+    if (/\b(?:name|placeholder|label)="[^"]*(?:password|passcode|card|cvc|cvv|private\s?key|seed\s?phrase|ssn|resident|jumin|비밀\s?번호|패스워드|카드|주민|개인\s?키|시드)[^"]*"/i.test(s)) {
+      return true;
+    }
+    if (/(?:textarea|select)\b[^>]*(?:주민|카드|비밀\s?번호|패스워드|개인\s?키|시드|password|card|private\s?key|seed\s?phrase|ssn|resident|jumin)/i.test(s)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function thirdPartyProviderContextLooksNatural(match, extracted, url) {
+  const names = [
+    ...normalizeNameList(match.form?.fieldNames),
+    ...normalizeNameList(match.form?.hiddenFieldNames),
+    ...normalizeNameList(match.form?.queryParamNames)
+  ].join(" ");
+  const hay = [
+    url,
+    extracted?.finalUrl || "",
+    extracted?.title || "",
+    (extracted?.visibleText || "").slice(0, 5000),
+    (extracted?.forms || []).join(" "),
+    match.form?.targetPath || "",
+    names
+  ].join("\n").normalize("NFC");
+
+  if (match.type === "identity_verification") {
+    return /(?:pass|safehscert|oknm|cert|auth|verify|identity|본인\s?인증|본인\s?확인|휴대폰\s?인증|휴대폰\s?본인|인증|회원\s?가입|예약|검진)/i.test(hay);
+  }
+  if (match.type === "payment_gateway") {
+    return /(?:pay|payment|checkout|billing|order|결제|주문|구매|청구)/i.test(hay);
+  }
+  if (match.type === "oauth_provider") {
+    return /(?:oauth|login|sign\s?in|로그인|간편\s?로그인|소셜\s?로그인)/i.test(hay);
+  }
+  return false;
+}
+
+function thirdPartyProviderFormSafeCap(verdict, extracted, url, finalOnFree, origOnFree, finalHost) {
+  const matches = matchedThirdPartyProviderForms(extracted);
+  if (matches.length === 0) return null;
+  if (finalOnFree || origOnFree || (finalHost && SHARED_SAAS_RE.test(finalHost))) return null;
+  if (hasNonFormHardEvidence(extracted)) return null;
+  if (hasDirectCredentialOrPaymentForms(extracted)) return null;
+
+  const contextual = matches.find(m => thirdPartyProviderContextLooksNatural(m, extracted, url));
+  if (!contextual) return null;
+
+  const modelNeedsCorrection = verdict?.phishing === true ||
+    verdict?.suspicious_domain === true ||
+    (verdict?.phishing_score ?? 0) >= 4;
+  if (!modelNeedsCorrection) return null;
+  return contextual;
+}
+
+function thirdPartyProviderPageSafeCap(extracted, url, finalOnFree, origOnFree) {
+  const providerPage = classifyThirdPartyProviderPage(extracted?.finalUrl || url, extracted);
+  if (!providerPage) return null;
+  if (finalOnFree || origOnFree) return null;
+  if (hasNonFormHardEvidence(extracted)) return null;
+  if (hasDirectCredentialOrPaymentForms(extracted)) return null;
+  return providerPage;
+}
+
 // 사용자 신뢰 도메인 캐시 — SW 수명 동안 유지 (lazy 초기화)
 let _userTrustedDomains = null;
 
@@ -1479,6 +2015,7 @@ async function applyOverrides(verdict, extracted, url, whois = "", meta = {}) {
   try { origHost  = new URL(url).hostname.toLowerCase(); } catch {}
   const finalOnFree = finalHost && FREE_HOSTING_RE.test(finalHost);
   const origOnFree  = origHost  && FREE_HOSTING_RE.test(origHost);
+  const providerPage = thirdPartyProviderPageSafeCap(extracted, url, finalOnFree, origOnFree);
 
   // [O0] 사용자가 클릭한 원본 URL이 free-hosting인데 페이지가 정식 브랜드 도메인으로 redirect됨 — 회피형 피싱
   if (origOnFree && !finalOnFree && origHost !== finalHost) {
@@ -1724,11 +2261,79 @@ async function applyOverrides(verdict, extracted, url, whois = "", meta = {}) {
 
   // [D1] 영구 denylist hit — 이전에 phishing(>=7)으로 확정된 호스트.
   // O5/O6 가 우회하지 못하도록 danger 푸시. allowlist 는 scanUrl 상단에서 이미 처리됨.
-  if (finalHost && await isDenylisted(finalHost)) {
+  if (finalHost && !providerPage && await isDenylisted(finalHost)) {
     overrides.push({ rule: "D1", sev: "danger", reason: t("bg.override.D1.denylistHit", finalHost) });
     verdict.phishing = true;
     verdict.phishing_score = Math.max(verdict.phishing_score ?? 0, 8);
     verdict.suspicious_domain = true;
+  }
+
+  // [O12] Direct visit to a recognized provider page. 사용자가 KCB/PASS 같은 provider URL 로
+  // 이동한 뒤 별도 스캔이 돌면 source brand(예: Howcare)를 current brand로 끌고 와 domain
+  // mismatch 를 만들면 안 된다. provider page 자체는 provider brand로 분리하고, hard evidence가
+  // 없을 때 모델의 inherited-brand 오판정을 cap 한다.
+  if (providerPage && !overrides.some(o => ["O2", "O3", "O4", "O7"].includes(o.rule))) {
+    for (let i = overrides.length - 1; i >= 0; i--) {
+      if (overrides[i].sev === "warn" || overrides[i].rule === "O1") overrides.splice(i, 1);
+    }
+    overrides.push({
+      rule: "O12-third-party-provider-page",
+      sev: "safe",
+      reason: t("bg.override.O12.thirdPartyProviderPage", providerPage.brand, providerPage.host),
+      suppressModelReason: true
+    });
+    verdict.brand = providerPage.brand;
+    verdict.phishing = false;
+    verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+    verdict.suspicious_domain = false;
+    verdict.third_party_provider = true;
+    verdict.provider = providerPage.provider;
+    verdict.provider_type = providerPage.type;
+  }
+
+  // [O9] First-party developer install command. OFFICIAL_DOMAINS 를 계속 늘리는 대신,
+  // 브랜드 토큰이 등록 도메인 SLD 와 정확히 일치하고 설치 명령의 HTTPS URL 도 같은 등록 도메인일
+  // 때만 LLM 의 "curl | sh == malicious" FP 를 cap 한다. 클립보드 강제쓰기, 난독화, captcha/
+  // verification lure, free/shared hosting, credential form, auto-download, dangerous URI, phishing kit
+  // 중 하나라도 있으면 발화하지 않는다. 세션/영구 trust 에도 넣지 않아 매번 재평가한다.
+  if (
+    !overrides.some(o => o.sev === "danger") &&
+    !overrides.some(o => o.rule === "O1" && o.sev !== "safe")
+  ) {
+    const install = firstPartyInstallCommandSafeCap(verdict, extracted, url, finalOnFree, origOnFree, finalHost);
+    if (install) {
+      overrides.push({
+        rule: "O9-first-party-install",
+        sev: "safe",
+        reason: t("bg.override.O9.firstPartyInstall", verdict.brand, install.domain),
+        suppressModelReason: true
+      });
+      verdict.phishing = false;
+      verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+      verdict.suspicious_domain = false;
+    }
+  }
+
+  // [O11] Cross-domain form to recognized third-party provider. 한국 본인확인/결제 생태계에서는
+  // 회원사 페이지가 공인 provider 로 hidden POST 하는 정상 플로우가 흔하다. cross-domain POST 는
+  // 위험 점수 근거가 아니라 context-expansion 신호로 취급하고, provider endpoint/파라미터 시그니처가
+  // 맞고 hard evidence 가 없을 때만 모델의 "외부 폼 전송" 오판을 cap 한다.
+  if (!overrides.some(o => o.sev === "danger")) {
+    const providerFlow = thirdPartyProviderFormSafeCap(verdict, extracted, url, finalOnFree, origOnFree, finalHost);
+    if (providerFlow) {
+      for (let i = overrides.length - 1; i >= 0; i--) {
+        if (overrides[i].sev === "warn") overrides.splice(i, 1);
+      }
+      overrides.push({
+        rule: "O11-third-party-form-provider",
+        sev: "safe",
+        reason: t("bg.override.O11.thirdPartyFormProvider", providerFlow.provider, providerFlow.form?.targetHost || providerFlow.matchedDomain),
+        suppressModelReason: true
+      });
+      verdict.phishing = false;
+      verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+      verdict.suspicious_domain = false;
+    }
   }
 
   // [O5] 사용자 개인 신뢰 도메인 (즐겨찾기 / 빈번 방문 / Top Sites)
@@ -1830,6 +2435,21 @@ async function applyOverrides(verdict, extracted, url, whois = "", meta = {}) {
         verdict.suspicious_domain = false;
       }
     }
+  }
+
+  // [O10] 모델 자기모순 보정. Gemini Nano 가 가끔 phishing=false/suspicious_domain=false 와
+  // "legitimate/no phishing indicators" reason 을 내면서 score 만 7+ 로 주는 경우가 있다.
+  // danger evidence 가 없을 때만 score 를 reason/boolean 과 일관되게 cap 한다.
+  if (!overrides.some(o => o.sev === "danger") && hasModelSafeScoreContradiction(verdict, extracted)) {
+    overrides.push({
+      rule: "O10-model-consistency",
+      sev: "safe",
+      reason: t("bg.override.O10.modelConsistency"),
+      suppressModelReason: true
+    });
+    verdict.phishing = false;
+    verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+    verdict.suspicious_domain = false;
   }
 
   if (overrides.length > 0) {
@@ -2074,6 +2694,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ isScanningTab: tabId != null && scanningTabs.has(tabId) });
     return false;
   }
+  if (msg?.type === "clickGuardWarnApprovalStatus" && msg.url) {
+    getClickGuardWarnApproval(msg.url)
+      .then(entry => sendResponse({
+        approved: !!entry,
+        host: entry?.host,
+        expiresAt: entry?.expiresAt
+      }))
+      .catch(e => sendResponse({ approved: false, error: String(e?.message || e) }));
+    return true;
+  }
+  if (msg?.type === "rememberClickGuardWarnApproval" && msg.url) {
+    rememberClickGuardWarnApproval(msg.url, msg.score)
+      .then(sendResponse)
+      .catch(e => sendResponse({ ok: false, error: String(e?.message || e) }));
+    return true;
+  }
   if (msg?.type === "allowlist" && msg.url) {
     (async () => {
       let host;
@@ -2122,8 +2758,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             await chrome.storage.session.set({ safeHosts: nextSafeHosts });
           }
         }
+        // 4) click guard warn 승인도 제거 — 다음 social/copy/download 클릭은 다시 확인받는다.
+        if (host) {
+          const { clickGuardWarnApprovals = [] } = await chrome.storage.session.get("clickGuardWarnApprovals");
+          const nextApprovals = clickGuardWarnApprovals.filter(e => e?.host !== host && e?.urlHash !== urlHash);
+          if (nextApprovals.length !== clickGuardWarnApprovals.length) {
+            await chrome.storage.session.set({ clickGuardWarnApprovals: nextApprovals });
+          }
+        }
 
-        // 4) 영구 denylist 에서 host hash 제거
+        // 5) 영구 denylist 에서 host hash 제거
         let denyRemoved = 0;
         if (host) {
           const hostHash = await sha256Hex(host);
@@ -2132,9 +2776,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           denyRemoved = phishingDenylist.length - filtered.length;
           if (denyRemoved > 0) await chrome.storage.local.set({ phishingDenylist: filtered });
         }
-        // 5) host allowlist 는 의도와 다르므로 건드리지 않음 — "허용" 한 결정은 유지.
+        // 6) host allowlist 는 의도와 다르므로 건드리지 않음 — "허용" 한 결정은 유지.
 
-        // 6) 모듈 메모리 캐시 무효화
+        // 7) 모듈 메모리 캐시 무효화
         _denylistCache = null;
 
         console.log("resetHistoryForUrl:", { host, denyRemoved, sessionRemoved: sessionKeysToRemove.length });

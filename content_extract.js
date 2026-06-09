@@ -52,6 +52,63 @@
     return `<${tag} ${pairs.join(" ")}>`;
   }
 
+  function registeredDomainFromHost(host) {
+    const h = String(host || "").toLowerCase().replace(/\.+$/, "");
+    if (!h) return "";
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return h;
+    const parts = h.split(".");
+    if (parts.length <= 2) return h;
+    const twoLevelTld = new Set(["co.kr", "or.kr", "go.kr", "ne.kr", "co.jp", "co.uk", "com.au"]);
+    const last2 = parts.slice(-2).join(".");
+    const last3 = parts.slice(-3).join(".");
+    if (parts.length >= 3 && twoLevelTld.has(last2)) return last3;
+    return last2;
+  }
+
+  function fieldNamesFor(form, selector) {
+    const names = new Set();
+    for (const el of form.querySelectorAll(selector)) {
+      const name = (el.getAttribute("name") || "").trim();
+      if (name) names.add(name.slice(0, 80));
+      if (names.size >= 20) break;
+    }
+    return [...names];
+  }
+
+  function serializeCrossDomainForm(form) {
+    const actionAttr = (form.getAttribute("action") || "").trim();
+    if (!actionAttr) return null;
+    let actionUrl;
+    try {
+      actionUrl = new URL(actionAttr, location.href);
+    } catch {
+      return null;
+    }
+    if (!/^https?:$/i.test(actionUrl.protocol)) return null;
+
+    const sourceHost = location.hostname.toLowerCase();
+    const targetHost = actionUrl.hostname.toLowerCase();
+    const sourceDomain = registeredDomainFromHost(sourceHost);
+    const targetDomain = registeredDomainFromHost(targetHost);
+    if (!sourceDomain || !targetDomain || sourceDomain === targetDomain) return null;
+
+    const fieldNames = fieldNamesFor(form, "input[name], textarea[name], select[name], button[name]");
+    const hiddenFieldNames = fieldNamesFor(form, "input[type='hidden'][name]");
+    const queryParamNames = [...new Set([...actionUrl.searchParams.keys()].map(k => k.slice(0, 80)))].slice(0, 20);
+    return {
+      action: actionUrl.origin + actionUrl.pathname,
+      method: (form.getAttribute("method") || "get").toLowerCase(),
+      sourceHost,
+      sourceDomain,
+      targetHost,
+      targetDomain,
+      targetPath: actionUrl.pathname.slice(0, 160),
+      queryParamNames,
+      fieldNames,
+      hiddenFieldNames
+    };
+  }
+
   // credential / PII / 제출 관련 컨트롤 라벨. 이 패턴에 맞는 버튼만 FORMS(보안 의미 있는
   // 입력/제출 표면)로 분류하고, 나머지 라벨 버튼은 UI_CONTROLS 로 분리, 라벨 없는 버튼은 버린다.
   const CREDENTIAL_CTRL_RE = new RegExp(
@@ -184,6 +241,13 @@
     }
   }
 
+  const crossDomainForms = [];
+  for (const form of document.querySelectorAll("form")) {
+    const x = serializeCrossDomainForm(form);
+    if (x) crossDomainForms.push(x);
+    if (crossDomainForms.length >= 10) break;
+  }
+
   // 3) 앵커 + 위험 URI / 실행 확장자 다운로드 링크 분류
   const seenAnchor = new Set();
   const anchors = [];
@@ -277,6 +341,7 @@
     finalUrl: cleanUrl,
     title: document.title || "",
     forms,
+    crossDomainForms,
     uiControls,
     anchors,
     imgs,
