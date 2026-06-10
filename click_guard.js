@@ -103,20 +103,59 @@
     finally { inflight = null; }
   }
 
-  function showInlineWarning(message) {
+  // 한 페이지에 동시에 하나의 스캔만 진행하도록 막는 가드 — 검사 중 같은/다른 링크를 여러 번
+  // 눌러도 중복 스캔·중복 다운로드(재디스패치 N회)가 안 일어나게 한다.
+  let scanClickPending = false;
+  let __pgBannerInterval = null;   // 경과 초 실시간 갱신
+  let __pgBannerHideTimer = null;  // 결과 배너 자동 숨김
+
+  function __pgBannerEl() {
     const id = "__pg_click_warning";
     let div = document.getElementById(id);
     if (!div) {
       div = document.createElement("div");
       div.id = id;
       div.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2147483647;"
-        + "background:#7f1d1d;color:#fff;padding:12px 18px;border-radius:8px;"
+        + "color:#fff;padding:12px 18px;border-radius:8px;"
         + "box-shadow:0 4px 14px rgba(0,0,0,.35);font:600 14px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;"
-        + "max-width:520px;text-align:center;";
+        + "max-width:560px;text-align:center;";
       document.documentElement.appendChild(div);
     }
-    div.textContent = "⚠ " + message;
-    setTimeout(() => { div?.remove(); }, 8000);
+    return div;
+  }
+  function __pgClearTimers() {
+    if (__pgBannerInterval) { clearInterval(__pgBannerInterval); __pgBannerInterval = null; }
+    if (__pgBannerHideTimer) { clearTimeout(__pgBannerHideTimer); __pgBannerHideTimer = null; }
+  }
+
+  // 진행 배너: 경과 초를 실시간 표시하고 스캔이 끝날 때까지 사라지지 않는다(과거 8초 자동숨김이
+  // 실제 스캔 시간(15~60s)보다 짧아 배너가 먼저 사라지던 문제 해결). 이미 떠 있으면 카운터 유지.
+  function showScanningBanner() {
+    if (__pgBannerInterval) return; // 이미 진행 중 — 카운터 리셋하지 않음
+    __pgClearTimers();
+    const div = __pgBannerEl();
+    div.style.background = "#1f2937";
+    const start = Date.now();
+    const render = () => {
+      const s = Math.round((Date.now() - start) / 1000);
+      div.textContent = `⏳ 이 링크를 검사 중입니다… ${s}초 · 안전 확인되면 자동으로 진행돼요 (최대 1분). 다시 누르지 않아도 됩니다.`;
+    };
+    render();
+    __pgBannerInterval = setInterval(render, 500);
+  }
+
+  // 결과 배너: 지정 시간 후 자동 숨김.
+  function showResultBanner(message, bg, ms) {
+    __pgClearTimers();
+    const div = __pgBannerEl();
+    div.style.background = bg || "#7f1d1d";
+    div.textContent = message;
+    __pgBannerHideTimer = setTimeout(() => { div?.remove(); }, ms || 8000);
+  }
+
+  function hideBanner() {
+    __pgClearTimers();
+    document.getElementById("__pg_click_warning")?.remove();
   }
 
   async function isWarnApprovedForCurrentHost() {
@@ -223,33 +262,45 @@
       // scan severity: capture 단계에서 일단 막고, 빠른 스캔 후 결정
       ev.preventDefault();
       ev.stopImmediatePropagation();
-      // banner는 스캔이 800ms 안에 끝나면 아예 안 보여준다.
-      // SW의 safeDomains hit/URL 캐시 hit은 IPC만 타고 ~50-200ms에 리턴하므로 banner가 깜빡거리지 않는다.
-      // 실제 추출+LLM이 도는 콜드 패스에서만 banner가 떠서 사용자에게 진행 상황을 알린다.
-      let bannerTimer = setTimeout(() => {
-        showInlineWarning(`이 페이지를 검사 중입니다… (${cls.reason})`);
-        bannerTimer = null;
-      }, 800);
-      const v = await quickScanCurrentPage();
-      if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
-      if (v && (v.phishing || (v.phishing_score ?? 0) >= 7)) {
-        showInlineWarning(`피싱 의심 페이지 — 클릭 차단됨. 사유: ${(v.reason || "").slice(0, 160)}`);
+
+      // 이미 검사 중이면 — 중복 스캔/중복 다운로드를 막고 진행 배너만 유지한다.
+      // (예전엔 검사 중 반복 클릭마다 핸들러가 재진입해, 완료 후 다운로드가 여러 번 트리거되거나
+      //  사용자가 "멈춘 줄 알고" 계속 누르던 문제.)
+      if (scanClickPending) {
+        showScanningBanner();
         return;
       }
-      if (v && (v.phishing_score ?? 0) >= 4) {
-        if (!await isWarnApprovedForCurrentHost()) {
-          const ok = confirm(
-            `이 페이지가 의심스럽습니다 (score ${v.phishing_score}/10).\n` +
-            `사유: ${(v.reason || "").slice(0, 300)}\n\n` +
-            "확인을 누르면 이번 브라우저 세션 동안 이 사이트의 클릭 경고는 다시 묻지 않습니다.\n" +
-            "계속 진행하시겠습니까?"
-          );
-          if (!ok) return;
-          await rememberWarnApprovalForCurrentHost(v);
+      scanClickPending = true;
+      const target = ev.target;
+      // 800ms 안에 끝나면(캐시 hit) 배너 안 뜸. 콜드 패스에서만 진행 배너 노출.
+      let bannerTimer = setTimeout(() => { showScanningBanner(); bannerTimer = null; }, 800);
+      try {
+        const v = await quickScanCurrentPage();
+        if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; }
+        if (v && (v.phishing || (v.phishing_score ?? 0) >= 7)) {
+          showResultBanner(`⛔ 피싱 의심 — 클릭 차단됨. 사유: ${(v.reason || "").slice(0, 160)}`, "#7f1d1d", 9000);
+          return;
         }
+        if (v && (v.phishing_score ?? 0) >= 4) {
+          hideBanner(); // confirm 띄우기 전 진행 배너 제거(겹침 방지)
+          if (!await isWarnApprovedForCurrentHost()) {
+            const ok = confirm(
+              `이 페이지가 의심스럽습니다 (score ${v.phishing_score}/10).\n` +
+              `사유: ${(v.reason || "").slice(0, 300)}\n\n` +
+              "확인을 누르면 이번 브라우저 세션 동안 이 사이트의 클릭 경고는 다시 묻지 않습니다.\n" +
+              "계속 진행하시겠습니까?"
+            );
+            if (!ok) return;
+            await rememberWarnApprovalForCurrentHost(v);
+          }
+        }
+        // safe(또는 warn 승인) → 완료 피드백 후 원래 클릭을 1회만 재실행.
+        showResultBanner("✓ 안전 확인 — 계속 진행합니다.", "#065f46", 2500);
+        allowedClicks.add(target);
+        target.click?.();
+      } finally {
+        scanClickPending = false;
       }
-      allowedClicks.add(ev.target);
-      ev.target.click?.();
     }, true /* capture */);
     console.log("[pg click_guard] installed on", location.href);
     // 첫 프리페치: 페이지 로드가 안정된 뒤(idle) 실행.

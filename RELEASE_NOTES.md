@@ -47,6 +47,20 @@ The deterministic fixture suite was run by the maintainer and passed after these
 
 ---
 
+# Windshock Lens v0.2.9 Release Notes
+
+## ⏳ Click-guard scan banner: live progress + no duplicate downloads
+
+When a download / copy / social-button click is intercepted for scanning, the wait was confusing — the "checking this page…" banner auto-hid after 8s while a cold scan (extraction + on-device inference) actually takes 15–60s, so users assumed it had stalled and kept clicking the link.
+
+- **Live elapsed counter** on a persistent banner: `⏳ 이 링크를 검사 중입니다… N초 · 안전 확인되면 자동으로 진행돼요 (최대 1분). 다시 누르지 않아도 됩니다.` It no longer disappears mid-scan.
+- **Single-scan guard (`scanClickPending`)**: repeated clicks during a scan no longer re-enter the handler. Previously each click re-dispatched on completion, which could trigger **multiple downloads**; now exactly one scan runs and the original click is re-dispatched **once**.
+- **Completion feedback**: safe → `✓ 안전 확인 — 계속 진행합니다.` (green, 2.5s) then the download/copy proceeds automatically; phishing → `⛔ 피싱 의심 — 클릭 차단됨` (red, 9s). The progress banner is cleared before any warn-level confirm dialog.
+
+No detection-logic changes — click-guard UX only.
+
+---
+
 # Windshock Lens v0.2.8 Release Notes
 
 ## 🏷 `O14-brand-owns-domain` — curation-free FP cap (any TLD)
