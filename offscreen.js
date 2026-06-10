@@ -51,44 +51,82 @@ async function ocrWorker() {
   _ocrWorker = await Tesseract.createWorker(langs, undefined, {
     workerPath: chrome.runtime.getURL("lib/worker.min.js"),
     corePath:   chrome.runtime.getURL("lib/tesseract-core.wasm.js"),
-    langPath:   chrome.runtime.getURL("lib/")
+    langPath:   chrome.runtime.getURL("lib/"),
+    // workerBlobURL:false → Tesseract 가 워커를 blob 으로 감싸지 않고 extension URL 에서 직접
+    // new Worker(workerPath) 로 로드한다. 기본값(true)은 blob 워커가
+    // importScripts("chrome-extension://.../lib/worker.min.js") 를 하는데, Chrome 148+ 에서
+    // blob-origin 워커의 extension URL importScripts 가 NetworkError 로 차단됨(OCR failed 회귀).
+    workerBlobURL: false,
+    // gzip:false → lib/ 에 비압축 *.traineddata 를 번들하므로 .gz suffix 를 붙이지 않는다.
+    // 기본값(true)은 `eng.traineddata.gz` 를 fetch 하는데 그 파일이 없어 "Failed to fetch" 회귀.
+    gzip: false
   });
   return _ocrWorker;
 }
 
-async function urlToBitmapSource(src, baseUrl) {
+// 이미지를 PNG Blob 으로 정규화한다. 원본 blob 을 Tesseract(Leptonica)에 직접 넘기면
+// WebP/AVIF/SVG 등 Leptonica 가 못 읽는 포맷이나 비-이미지 응답에서 "Unknown format / cannot
+// be read" 가 나고, 심하면 WASM 워커가 abort 되어 이후 OCR 이 전부 깨진다. 브라우저 디코더
+// (createImageBitmap)로 디코드 → OffscreenCanvas → PNG 로 재인코딩하면 Leptonica 는 항상
+// 읽을 수 있는 PNG 만 받으므로 포맷 문제가 사라진다. (Blob 은 Tesseract recognize 가 확실히 수용)
+async function urlToPngBlob(src, baseUrl) {
+  let blob;
   if (src.startsWith("data:image/")) {
-    // data URL은 Tesseract가 직접 처리 가능.
-    return src;
+    blob = await (await fetch(src)).blob();
+  } else {
+    let absolute = src;
+    try { absolute = new URL(src, baseUrl).href; } catch {}
+    const res = await fetch(absolute, { credentials: "omit" });
+    if (!res.ok) throw new Error(`img fetch ${res.status}`);
+    blob = await res.blob();
   }
-  let absolute = src;
-  try { absolute = new URL(src, baseUrl).href; } catch {}
-  // SW에서 host_permissions로 fetch 가능하지만, offscreen에서도 동일 권한 적용.
-  const res = await fetch(absolute, { credentials: "omit" });
-  if (!res.ok) throw new Error(`img fetch ${res.status}`);
-  const blob = await res.blob();
-  return blob;
+  const bmp = await createImageBitmap(blob); // SVG/손상 이미지는 여기서 throw → 호출부가 skip
+  let w = bmp.width, h = bmp.height;
+  if (!w || !h) { bmp.close?.(); return null; }
+  const MAX = 2000; // 긴 변 캡 — 과대 이미지 메모리/시간 방어
+  const scale = Math.min(1, MAX / Math.max(w, h));
+  w = Math.max(1, Math.round(w * scale));
+  h = Math.max(1, Math.round(h * scale));
+  const canvas = new OffscreenCanvas(w, h);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bmp, 0, 0, w, h);
+  bmp.close?.();
+  return await canvas.convertToBlob({ type: "image/png" });
 }
 
 async function ocrImages({ imgs, base }) {
   if (!imgs || imgs.length === 0) return "";
-  const worker = await ocrWorker();
+  let worker;
+  try { worker = await ocrWorker(); } catch { return ""; }
   const parts = [];
   let total = 0;
   const PER_IMG_CAP = 200;
   const TOTAL_CAP = 800;
   for (const src of imgs) {
     if (total >= TOTAL_CAP) break;
+    // 1) fetch + 브라우저 디코드 + PNG 정규화. 실패(비-이미지/SVG/손상)는 그 이미지만 skip.
+    let pngBlob;
     try {
-      const source = await urlToBitmapSource(src, base);
-      const { data } = await worker.recognize(source);
+      pngBlob = await urlToPngBlob(src, base);
+    } catch (e) {
+      continue;
+    }
+    if (!pngBlob) continue;
+    // 2) 인식. recognize 자체가 실패하면 워커가 깨졌을 수 있으니 폐기하고 중단 —
+    //    다음 OCR 호출이 ocrWorker() 에서 새 워커를 만든다(self-heal). 죽은 워커를
+    //    계속 재사용해 모든 후속 OCR 이 깨지는 회귀를 방지한다.
+    try {
+      const { data } = await worker.recognize(pngBlob);
       const text = (data?.text || "").replace(/\s+/g, " ").trim();
       if (!text) continue;
       const slice = text.slice(0, PER_IMG_CAP);
       parts.push(slice);
       total += slice.length + 1;
     } catch (e) {
-      // 한 장 실패는 무시
+      console.warn("OCR recognize failed — resetting worker:", e);
+      try { await worker.terminate?.(); } catch {}
+      _ocrWorker = null;
+      break;
     }
   }
   return parts.join(" ").slice(0, TOTAL_CAP);
@@ -119,7 +157,23 @@ function parseWhois(html) {
       "Name Server":  grab(/(?:Name Server|호스트이름)\s*:?[\s]*([^\n]+)/i),
       "Contact":      grab(/(?:Registrar Abuse Contact Email|AC E-Mail|책임자 전자우편)\s*:?[\s]*([^\n]+)/i)
     };
-    return Object.entries(d).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(", ");
+    // 등록인(Registrant) 추출 — yesnic .kr WHOIS 는 영문 "Registrant :" + 한글 "등록인 :" 을
+    // 모두 노출한다(예: ogog.kr → "SK Planet Co. Ltd."). `Registrant\s*:` 라 "Registrant Address"
+    // 는 매칭되지 않는다. 영문 우선(.com RDAP anchor 와 정규화 일관), 없으면 한글 폴백.
+    // O1-whois / O1-whois-transitive / O1-infra 가 소비할 수 있게 별도 `| Registrant:` 세그먼트로
+    // 붙인다(콤마-조인 안에 묻으면 override 의 `|` split + `^Registrant:` 필터가 인식 못 함).
+    let registrant = grab(/Registrant\s*:\s*([^\n]+)/i) || grab(/등록인\s*:\s*([^\n]+)/i);
+    if (registrant) {
+      registrant = registrant
+        .replace(/&nbsp;/gi, " ")
+        // 한 줄에 다음 필드가 붙어온 경우(newline 부재) 방어적 절단
+        .split(/\s{2,}|(?:Registrant Address|Administrative Contact|AC E-?Mail|AC Phone|등록인\s*주소|책임자|Registered Date|Expiration Date)/i)[0]
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 120);
+    }
+    const base = Object.entries(d).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(", ");
+    return registrant ? `${base} | Registrant: ${registrant}` : base;
   } catch (e) {
     return "";
   }

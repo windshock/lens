@@ -14,9 +14,12 @@
 
   const DANGEROUS_URI_RE = /^(applescript|ms-msdt|ms-msvr|ms-search|search-ms|shell|vbscript|jar|telnet):/i;
   const EXEC_EXT_RE = /\.(exe|dmg|pkg|msi|bat|cmd|ps1|vbs|jar|scr|hta|app|command|scpt|sh|run|deb|rpm|appimage|appx)(\?|$)/i;
-  // 클립보드 카피 의심 버튼: 단어 "copy/verify/I'm not a robot" 류가 텍스트의 *전부* 인 경우만.
+  // 클립보드 카피 의심 버튼: 단어 "copy/verify human/I'm not a robot/보안 확인" 류가 텍스트의 *전부* 인 경우만.
   // 단어 경계 + 전체-텍스트 매치 — 'Copyright', 'Verify my email', 'copy-icon-container' 등 false match 제거.
-  const STRICT_COPY_HINT_RE = /^\s*(copy|copy\s+code|copy\s+to\s+clipboard|복사|복사하기|클립보드(에)?\s*복사|clipboard|verify(\s+you\s+are\s+human)?|i'?m\s+not\s+a\s+robot|확인|인증|보안\s*확인)\s*$/i;
+  // 단독 "확인"(OK)·"인증"(본인인증) 은 정상 한국 UI 의 가장 흔한 버튼 라벨이라 제외 — 정상 가입/모달
+  // 페이지(예: howcare.co.kr 의 모달 "확인")까지 click_guard 가 발동하던 FP. ClickFix 의도는
+  // "보안 확인"/"verify you are human" 같은 구절에 있고, 실제 클립보드 셸 payload 는 O2 가 잡는다.
+  const STRICT_COPY_HINT_RE = /^\s*(copy|copy\s+code|copy\s+to\s+clipboard|복사|복사하기|클립보드(에)?\s*복사|clipboard|verify\s+you\s+are\s+human|i'?m\s+not\s+a\s+robot|보안\s*확인)\s*$/i;
 
   function closestActionable(node) {
     while (node && node !== document.documentElement) {
@@ -69,7 +72,12 @@
   // 최근 스캔 결과 캐시 — URL이 바뀌지 않는 한 영구. SPA 라우팅 등 URL 변경 시 무효화.
   let lastVerdict = null;
   let lastVerdictUrl = null;
-  let warnApprovedUrl = null;
+  // warn(4~6) 승인은 host 단위로 기억 — 멀티스텝 플로우(가입/동의 등)가 URL 을 바꿔도
+  // 세션 동안 같은 사이트는 다시 묻지 않는다. (SW 도 host 단위로 저장/조회)
+  let warnApprovedHost = null;
+  function currentHost() {
+    try { return new URL(location.href).hostname.toLowerCase(); } catch { return ""; }
+  }
   // 현재 in-flight 스캔(같은 페이지에서 동시 다중 클릭 막음)
   let inflight = null;
 
@@ -111,29 +119,29 @@
     setTimeout(() => { div?.remove(); }, 8000);
   }
 
-  async function isWarnApprovedForCurrentUrl() {
-    const url = location.href;
-    if (warnApprovedUrl === url) return true;
+  async function isWarnApprovedForCurrentHost() {
+    const host = currentHost();
+    if (host && warnApprovedHost === host) return true;
     try {
+      // SW 가 url 에서 host 를 파생해 host 단위로 조회한다.
       const res = await chrome.runtime.sendMessage({
         type: "clickGuardWarnApprovalStatus",
-        url
+        url: location.href
       });
       if (res?.approved) {
-        warnApprovedUrl = url;
+        warnApprovedHost = host;
         return true;
       }
     } catch {}
     return false;
   }
 
-  async function rememberWarnApprovalForCurrentUrl(verdict) {
-    const url = location.href;
-    warnApprovedUrl = url;
+  async function rememberWarnApprovalForCurrentHost(verdict) {
+    warnApprovedHost = currentHost();
     try {
       await chrome.runtime.sendMessage({
         type: "rememberClickGuardWarnApproval",
-        url,
+        url: location.href,
         score: verdict?.phishing_score
       });
     } catch {}
@@ -229,15 +237,15 @@
         return;
       }
       if (v && (v.phishing_score ?? 0) >= 4) {
-        if (!await isWarnApprovedForCurrentUrl()) {
+        if (!await isWarnApprovedForCurrentHost()) {
           const ok = confirm(
             `이 페이지가 의심스럽습니다 (score ${v.phishing_score}/10).\n` +
             `사유: ${(v.reason || "").slice(0, 300)}\n\n` +
-            "확인을 누르면 이번 브라우저 세션 동안 같은 URL의 클릭 경고는 다시 묻지 않습니다.\n" +
+            "확인을 누르면 이번 브라우저 세션 동안 이 사이트의 클릭 경고는 다시 묻지 않습니다.\n" +
             "계속 진행하시겠습니까?"
           );
           if (!ok) return;
-          await rememberWarnApprovalForCurrentUrl(v);
+          await rememberWarnApprovalForCurrentHost(v);
         }
       }
       allowedClicks.add(ev.target);

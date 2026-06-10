@@ -1258,16 +1258,20 @@ async function rememberSessionTrustedHost(url, sourceRule) {
 
 async function getClickGuardWarnApproval(url) {
   if (!url || !/^https?:/i.test(url)) return null;
-  const urlHash = await sha256Hex(url);
+  // warn(4~6) 승인은 host 단위로 조회한다. 가입/동의 같은 멀티스텝 플로우가 단계마다
+  // URL(query/hash/path)을 바꿔도 승인이 유지돼 confirm 무한 재등장을 막는다.
+  // danger(>=7)는 click_guard 에서 이 승인과 무관하게 항상 차단되므로 안전.
+  const host = hostFromUrl(url);
+  if (!host) return null;
   const now = Date.now();
   const { clickGuardWarnApprovals = [] } = await chrome.storage.session.get("clickGuardWarnApprovals");
   const live = clickGuardWarnApprovals
-    .filter(e => e && e.urlHash && e.expiresAt > now)
+    .filter(e => e && e.host && e.expiresAt > now)
     .slice(-200);
   if (live.length !== clickGuardWarnApprovals.length) {
     await chrome.storage.session.set({ clickGuardWarnApprovals: live });
   }
-  return live.find(e => e.urlHash === urlHash) || null;
+  return live.find(e => e.host === host) || null;
 }
 
 async function rememberClickGuardWarnApproval(url, score) {
@@ -1277,8 +1281,9 @@ async function rememberClickGuardWarnApproval(url, score) {
   const now = Date.now();
   const urlHash = await sha256Hex(url);
   const { clickGuardWarnApprovals = [] } = await chrome.storage.session.get("clickGuardWarnApprovals");
+  // host 단위 dedup — 같은 host 의 기존 승인은 교체(갱신). URL 별로 엔트리가 쌓이지 않게.
   const live = clickGuardWarnApprovals
-    .filter(e => e && e.urlHash && e.expiresAt > now && e.urlHash !== urlHash)
+    .filter(e => e && e.host && e.expiresAt > now && e.host !== host)
     .slice(-199);
   const entry = {
     urlHash,
@@ -1463,7 +1468,14 @@ async function _runScan(url, source, meta, key, bypassLookup) {
     extracted = extracted || { finalUrl: url, forms: [], anchors: [], imgs: [], visibleText: "" };
   }
 
-  const a = await checkAvailability();
+  let a = await checkAvailability();
+  if (a === "unavailable") {
+    // `LanguageModel.availability()` 가 모델 서비스 busy/cold 시 일시적으로 "unavailable" 을
+    // 반환하는 flicker 가 있다(특히 무거운 추출 직후 첫 추론). 1회 짧게 재시도해 false negative
+    // (정상 페이지가 model_unavailable 로 스캔 실패)를 줄인다. 진짜 미지원이면 재시도도 동일.
+    await new Promise(r => setTimeout(r, 600));
+    a = await checkAvailability();
+  }
   if (a === "unavailable") {
     return { error: "model_unavailable", availability: a };
   }
@@ -1472,16 +1484,39 @@ async function _runScan(url, source, meta, key, bypassLookup) {
     return { error: "model_download_required", availability: a };
   }
 
-  const session = await createLanguageModelSession();
+  // 캐시된 베이스 세션을 재사용하고 스캔마다 clone() 으로 깨끗한 컨텍스트를 쓴다.
+  // 예전엔 스캔마다 LanguageModel.create() 로 풀 세션을 새로 만들고 destroy 했는데, on-device
+  // 세션 churn 이 누적되면 Gemini Nano 가 새 세션 생성에서 hang 하는 회귀가 있었다("Starting
+  // on-device session" 만 반복되고 추론이 안 끝남). clone 은 가볍고 베이스의 system 프롬프트
+  // 컨텍스트를 복사하므로 매 스캔 독립 컨텍스트를 보장한다.
+  let base;
+  try {
+    base = await ensureSession();
+  } catch (e) {
+    return { error: "model_error", message: String(e?.message || e) };
+  }
+  let session = base, isClone = false;
+  if (typeof base.clone === "function") {
+    try { session = await base.clone(); isClone = true; } catch { session = base; isClone = false; }
+  }
   let raw;
   try {
     const body = await buildPrompt(session, extracted.finalUrl || url, ocr, whois, extracted);
-    raw = await session.prompt(body, { responseConstraint: VERDICT_SCHEMA, omitResponseConstraintInput: true, outputLanguage: "en" });
+    // prompt 가 행 걸려도 세션·SW 가 영구 wedge 되지 않게 타임아웃. popup 의 60s 안전망보다 짧게.
+    raw = await Promise.race([
+      session.prompt(body, { responseConstraint: VERDICT_SCHEMA, omitResponseConstraintInput: true, outputLanguage: "en" }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("prompt_timeout_45s")), 45000))
+    ]);
   } catch (e) {
     console.warn("LM.prompt failed:", e);
-    return { error: "model_error", message: String(e) };
+    // hang/오류 시 베이스 세션을 폐기하고 캐시를 비워, 다음 스캔이 새 세션을 만들게 한다(self-heal).
+    _session = null;
+    _sessionPromise = null;
+    destroyLanguageModelSession(base).catch(() => {});
+    return { error: "model_error", message: String(e?.message || e) };
   } finally {
-    await destroyLanguageModelSession(session);
+    // clone 만 폐기 — 캐시된 베이스 세션은 재사용을 위해 살려둔다.
+    if (isClone) destroyLanguageModelSession(session).catch(() => {});
   }
   let verdict;
   try { verdict = JSON.parse(raw); }
@@ -2008,6 +2043,18 @@ function extractInfraDomains(whoisStr) {
   return [...out].filter(Boolean);
 }
 
+// whois 문자열의 등록일(Registered / Registered Date / 등록일)을 epoch ms 로 파싱.
+// yesnic .kr 포맷("2021. 09. 07.") + ISO("1999-02-26T...") + "YYYY/MM/DD" 모두 수용. 실패 시 null.
+function whoisRegisteredDate(whoisStr) {
+  if (!whoisStr) return null;
+  const m = String(whoisStr).match(/Registered(?:\s*Date)?\s*:\s*(\d{4})[.\-/\s]+(\d{1,2})[.\-/\s]+(\d{1,2})/i);
+  if (!m) return null;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const t = Date.UTC(y, mo - 1, d);
+  return Number.isFinite(t) ? t : null;
+}
+
 async function applyOverrides(verdict, extracted, url, whois = "", meta = {}) {
   const overrides = [];
   let finalHost = "", origHost = "";
@@ -2450,6 +2497,37 @@ async function applyOverrides(verdict, extracted, url, whois = "", meta = {}) {
     verdict.phishing = false;
     verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
     verdict.suspicious_domain = false;
+  }
+
+  // [O13] Established .kr domain with a real corporate registrant — curation-free FP cap.
+  // LM 이 brand 를 못 잡거나 OFFICIAL_DOMAINS 에 없어도, .kr 레지스트리에 실재 법인 registrant 가
+  // 있고 도메인이 1년 이상 됐으면 정상으로 본다. OFFICIAL_DOMAINS 무한 확장(브랜드×별칭 매트릭스)
+  // 대신 증거(.kr 실명 등록 + 도메인 나이)로 일반화. 다른 override(danger/warn/safe)가 하나라도
+  // 있으면 발화 안 함 — 특히 O1 brand-mismatch warn(사칭 의심)을 덮지 않게 한다. 소유권 주장이
+  // 아니므로 DOMAIN_TRUST_RULES 제외(매 스캔 재평가). hard evidence 는 항상 우선.
+  if (
+    !overrides.some(o => o.sev === "danger" || o.sev === "warn") &&
+    !overrides.some(o => o.sev === "safe") &&
+    (verdict.phishing_score ?? 0) > 3 &&
+    finalHost && /\.kr$/i.test(finalHost) &&
+    !finalOnFree && !origOnFree
+  ) {
+    const registrant = extractRegistrantValue(whois);
+    const PRIVACY_RE = /(privacy|redact|proxy|whoisguard|protect|withheld|비공개|개인정보\s*보호|정보보호)/i;
+    const realOrg = registrant.length >= 2 && !PRIVACY_RE.test(registrant);
+    const regDate = whoisRegisteredDate(whois);
+    const ageDays = regDate != null ? (Date.now() - regDate) / 86400000 : null;
+    if (realOrg && ageDays != null && ageDays >= 365) {
+      overrides.push({
+        rule: "O13-established-kr-registrant",
+        sev: "safe",
+        reason: t("bg.override.O13.establishedKr", registrant, Math.floor(ageDays / 365)),
+        suppressModelReason: true
+      });
+      verdict.phishing = false;
+      verdict.phishing_score = Math.min(verdict.phishing_score ?? 0, 3);
+      verdict.suspicious_domain = false;
+    }
   }
 
   if (overrides.length > 0) {

@@ -47,6 +47,55 @@ The deterministic fixture suite was run by the maintainer and passed after these
 
 ---
 
+# Windshock Lens v0.2.7 Release Notes
+
+A debugging-driven release that started from two false positives (`ogog.kr`, `howcare.co.kr`) and surfaced a chain of deeper issues — a dead OCR pipeline, an empty page-body on hidden-tab scans, an unsustainable brand allowlist, a click-guard loop, and LM session churn. Each was verified against live data (Chrome DevTools Protocol, real RDAP/WHOIS, the actual yesnic HTML) rather than assumed. Full fixture suite now passes 22/22.
+
+## 🖱 Click-guard: infinite re-prompt + over-broad trigger
+
+On `howcare.co.kr` the click-guard kept re-prompting "this page is suspicious (4/10)" every time the user pressed a modal **확인** button.
+
+- **Loop fix:** the warn-level approval was keyed to the exact `location.href`, so a multi-step sign-up flow (URL changes per step) defeated it and re-prompted forever. Approval is now **host-scoped** (`getClickGuardWarnApproval`/`rememberClickGuardWarnApproval` look up and dedup by host). `danger` (≥7) is unaffected — it always blocks regardless of warn approval.
+- **Trigger fix:** `STRICT_COPY_HINT_RE` matched bare **"확인"(OK) / "인증"(verify) / "verify"**, which are the most common legitimate Korean UI button labels. Removed them; the rule now matches only ClickFix-specific phrasing (`보안 확인` / `verify you are human` / `복사` / `i'm not a robot`). Real clipboard-shell ClickFix is still caught by `O2`.
+
+## 🔤 OCR pipeline resurrected (3 stacked failures)
+
+OCR had never actually run in this environment — three separate failures masked each other:
+
+1. **Worker load** — Tesseract's default blob-wrapped worker does `importScripts("chrome-extension://…/lib/worker.min.js")`, which Chrome 148 blocks for blob-origin workers. Fixed with `createWorker({ workerBlobURL: false })` (loads the worker directly from the same-origin extension URL).
+2. **WASM CSP** — `WebAssembly.instantiate()` violated the default MV3 CSP (`script-src 'self'`). Added `'wasm-unsafe-eval'` to `content_security_policy.extension_pages` (allows only WASM compilation, not arbitrary `eval`).
+3. **traineddata fetch** — Tesseract defaulted to fetching `eng.traineddata.gz`, but `lib/` ships uncompressed files → "Failed to fetch". Fixed with `gzip: false`.
+
+Hardening on top: images are now normalized via `createImageBitmap → OffscreenCanvas → PNG` before recognize, so WebP/AVIF/SVG and non-image responses can't abort the Leptonica reader (which then poisoned all subsequent OCR); and a failed `recognize` resets the worker (self-heal) instead of reusing a dead one.
+
+## 📄 Hidden-tab body text was empty (high-impact)
+
+`content_extract.js` read `textRoot.innerText`, which is **layout-dependent and returns "" in background (`active:false`) tabs** — exactly the hidden scan tab used by context-menu / regression / fallback scans. So every hidden-tab scan ran with **no page body text**, hiding footer signals like "SK플래닛 주식회사 / Copyright SK PLANET". `visibleText` now falls back to `textContent` (with `script`/`style`/`noscript`/`svg` stripped on a detached clone, leaving the live DOM untouched) when `innerText` is empty. This alone fixed `ogog.kr`: with the footer text restored, the model self-corrected its brand from "OGOG" → "OK캐쉬백" (a curated domain) and `O1-safe` capped it.
+
+## 🏷 WHOIS registrant extraction + evidence-based `.kr` cap (sustainable de-curation)
+
+The `OFFICIAL_DOMAINS` brand×domain×alias matrix doesn't scale — the model names the same site "OK캐쉬백" / "OGOG" / "오글오글" across runs, and legitimate sites are a long tail. Two changes move legitimacy判정 toward verifiable evidence:
+
+- **`parseWhois` now extracts `등록인` / `Registrant`** (it was fetching the field via yesnic but discarding it; `rdap.org` doesn't serve `.kr`, so this was the only registrant source for Korean domains). Emitted as a dedicated `| Registrant: <org>` segment so the existing `O1-whois` family can consume it.
+- **New `O13-established-kr-registrant`:** a `.kr` host with a real corporate registrant (non-empty, not a privacy/proxy string) and domain age ≥ 365 days, with **no other override (danger/warn/safe)**, caps `score ≤ 3`. It does not depend on the model's brand string, doesn't touch `DOMAIN_TRUST_RULES`, and never overrides a brand-mismatch warn. This is what lets `howcare.co.kr` (registrant "Gc Healthcare Co.,Ltd", registered 2021) pass **without** being added to `OFFICIAL_DOMAINS`.
+
+## ⚙️ LM session reuse + resilience
+
+- Scans were creating a fresh `LanguageModel` session each time and destroying it; the on-device session churn eventually made `create()` hang ("Starting on-device session" repeating with no inference). `scanUrl` now reuses a cached base session via `ensureSession()` and `clone()`s it per scan (destroying only the clone).
+- `prompt()` is wrapped in a 45s timeout; on error/timeout the base session cache is cleared and the session destroyed so the next scan rebuilds (self-heal).
+- The `availability()` gate retries once after 600ms on a transient `"unavailable"` flicker (seen after heavy extraction), instead of failing the scan outright.
+
+## Other
+
+- `Netflix` added to `OFFICIAL_DOMAINS` (its login page carries a credential form; without curation the model could float it above the cap).
+- Fixtures: `netflix-login-safe` added; full suite 22/22.
+
+## Spec sync (SDD)
+
+`docs/development-spec.md`: FR-008 (host-scoped click-guard + trigger refinement), FR-012 (OCR worker/CSP/image normalization), FR-035 (visibleText fallback), FR-039 (LM session reuse), FR-040 (`O13` evidence-based `.kr` cap); override table and message/storage tables updated.
+
+---
+
 # Windshock Lens v0.2.5 Release Notes
 
 This release continues the `ogog.kr` false-positive investigation from v0.2.4. Re-running the fixture set in **deterministic regression mode** (`bypassUserTrust: true`, which skips the O5 personal-trust signal) exposed several issues that the user's own bookmarks/history had been masking, plus a class of extraction noise that made normal pages look suspicious.

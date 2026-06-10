@@ -132,6 +132,7 @@
       "bg.override.O11.thirdPartyFormProvider": "Cross-domain form targets recognized third-party provider {0} ({1}); provider POST alone is not phishing evidence. No hard evidence found.",
       "bg.override.O12.thirdPartyProviderPage": "Recognized third-party provider page: {0} ({1}). Do not apply source-brand domain mismatch. No hard evidence found.",
       "bg.override.O1infra.match":    "Infrastructure corroboration: WHOIS name server / contact ({1}) matches official domain of '{0}', which the page also identifies. No hard evidence.",
+      "bg.override.O13.establishedKr": "Established .kr domain registered to a real organization ('{0}', ~{1}+ yr old) with no hard evidence — treated as legitimate.",
 
       // compat-check page (EN)
       "compat.title":                 "Built-in AI Compatibility Check — Windshock Lens",
@@ -335,6 +336,7 @@
       "bg.override.O11.thirdPartyFormProvider": "cross-domain form 이 공인 제3자 provider {0}({1}) 로 향함 — provider POST 단독은 피싱 근거가 아님. hard evidence 없음.",
       "bg.override.O12.thirdPartyProviderPage": "공인 제3자 provider 페이지: {0}({1}). source brand 도메인 불일치로 보지 않음. hard evidence 없음.",
       "bg.override.O1infra.match":    "인프라 보강 증거: WHOIS 네임서버/연락처({1})가 '{0}' 공식 도메인과 일치하고 페이지에도 해당 브랜드 명시. hard evidence 없음.",
+      "bg.override.O13.establishedKr": "실재 법인('{0}')에 등록된 노후 .kr 도메인(~{1}년+) + hard evidence 없음 — 정상으로 처리.",
 
       // compat-check page (KO)
       "compat.title":                 "Built-in AI 호환성 진단 — Windshock Lens",

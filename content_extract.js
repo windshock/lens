@@ -283,9 +283,22 @@
   // SPA/채팅 서비스의 좌측 사이드바·히스토리·내비게이션 단어가 shellHits로 섞이는 것을 줄이기 위해
   // 본문 영역(main/article/role=main)을 우선 사용한다. 없으면 기존처럼 body로 폴백한다.
   const textRoot = document.querySelector("main, article, [role='main']") || document.body;
-  const visibleText = ((textRoot && textRoot.innerText) || "")
+  let visibleText = ((textRoot && textRoot.innerText) || "")
     .replace(/\s+/g, " ")
     .trim();
+  // innerText 는 레이아웃 의존이라 백그라운드(active:false) 숨김 탭에서 빈 문자열이 된다 —
+  // 숨김 탭 스캔(contextMenu/회귀/폴백)에서 body 텍스트가 통째로 누락돼 LM 이 footer 의
+  // 운영사/저작권 같은 정상 신호(예: "SK플래닛 주식회사", "Copyright SK PLANET")를 못 봤다.
+  // innerText 가 사실상 비면 textContent 로 폴백하되, script/style/noscript/svg 노이즈는
+  // detached clone 에서 제거한다(live DOM 은 건드리지 않음 — 활성 탭 주입 안전).
+  if (textRoot && visibleText.length < 20) {
+    try {
+      const clone = textRoot.cloneNode(true);
+      for (const n of clone.querySelectorAll("script,style,noscript,template,svg")) n.remove();
+      const fallback = (clone.textContent || "").replace(/\s+/g, " ").trim();
+      if (fallback.length > visibleText.length) visibleText = fallback.slice(0, 20000);
+    } catch {}
+  }
 
   // 6) 사회공학 / 셸 힌트 텍스트 매치
   const socialHits = [];
