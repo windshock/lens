@@ -47,6 +47,19 @@ The deterministic fixture suite was run by the maintainer and passed after these
 
 ---
 
+# Windshock Lens v0.2.10 Release Notes
+
+## 🗂 Popular-domain list split into its own module + direct-commit automation
+
+The generated ~2,000-entry `POPULAR_DOMAINS` set was inlined in `background.js`, and the daily refresh opened a pull request editing `background.js`. This bloated `background.js` and required PR review of generated data.
+
+- The list now lives in **`popular-domains.js`** (`export const POPULAR_DOMAINS = new Set([...])`), imported by `background.js`. No runtime/behavior change — same domains, same `O6` cap.
+- `tools/update-popular-domains.mjs` now writes `popular-domains.js` instead of editing `background.js`.
+- The GitHub Action **commits the regenerated `popular-domains.js` directly to `main`** (no PR — it's generated data, not reviewed code). `peter-evans/create-pull-request` is removed, which also drops its Node 20 deprecation warning; the step is now a plain `git commit && git push` with `contents: write` only.
+- `tools/build_dist.sh` includes `popular-domains.js` in the store package.
+
+---
+
 # Windshock Lens v0.2.9 Release Notes
 
 ## ⏳ Click-guard scan banner: live progress + no duplicate downloads

@@ -25,7 +25,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
   group: update-popular-domains
@@ -51,24 +50,16 @@ jobs:
       - name: Update generated domain list
         run: node tools/update-popular-domains.mjs
 
-      - name: Create pull request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: automation/update-popular-domains
-          delete-branch: true
-          commit-message: "chore: update popular domains"
-          title: "chore: update popular domains"
-          body: |
-            Automated refresh of the generated `POPULAR_DOMAINS` list in `background.js`.
-
-            Sources:
-            - Tranco latest list
-            - Majestic Million
-            - Cisco Umbrella top 1M
-            - Cloudflare Radar top domains, when `CLOUDFLARE_API_TOKEN` is configured
-          labels: |
-            automation
-            data-update
-          add-paths: |
-            background.js
+      # PR 없이 popular-domains.js 만 main 에 직접 커밋(생성 데이터 파일이라 리뷰 불요).
+      - name: Commit updated domain list
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- popular-domains.js; then
+            echo "popular-domains.js unchanged — nothing to commit."
+          else
+            git add popular-domains.js
+            git commit -m "chore: update popular domains [skip ci]"
+            git push
+            echo "popular-domains.js updated and pushed."
+          fi

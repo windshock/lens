@@ -29,9 +29,9 @@ See [docs/privacy.md](docs/privacy.md) for the full privacy policy — what data
 
 ## 🌍 Popular Domain Updates
 
-`background.js` contains a generated `POPULAR_DOMAINS` list used by the O6 false-positive cap. It is refreshed by `.github/workflows/update-popular-domains.yml` via `tools/update-popular-domains.mjs`.
+The generated `POPULAR_DOMAINS` list used by the O6 false-positive cap lives in its own module, **`popular-domains.js`** (imported by `background.js`). It is refreshed by `.github/workflows/update-popular-domains.yml` via `tools/update-popular-domains.mjs`, which **commits the updated `popular-domains.js` directly to `main`** (no pull request — it is generated data, not reviewed code).
 
-Default sources are Tranco latest list, Majestic Million, and Cisco Umbrella top 1M. If the repository secret `CLOUDFLARE_API_TOKEN` is configured with Cloudflare Radar read permission, Cloudflare Radar global top domains are also merged. Manual workflow runs can set `limit` or `source_limit` to `unlimited`, and `tranco_size` to `full`, but large generated lists will make `background.js` and the extension service worker heavier.
+Default sources are Tranco latest list, Majestic Million, and Cisco Umbrella top 1M. If the repository secret `CLOUDFLARE_API_TOKEN` is configured with Cloudflare Radar read permission, Cloudflare Radar global top domains are also merged. Manual workflow runs can set `limit` or `source_limit` to `unlimited`, and `tranco_size` to `full`, but large generated lists will make `popular-domains.js` and the extension service worker heavier.
 
 ---
 

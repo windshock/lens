@@ -32,6 +32,7 @@ rm -f "$OUT_ZIP"
 INCLUDE=(
   manifest.json
   background.js
+  popular-domains.js
   click_guard.js
   clipboard_hook.js
   content_extract.js
