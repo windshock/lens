@@ -1,0 +1,74 @@
+name: Update Popular Domains
+
+on:
+  schedule:
+    # Tranco publishes the daily list by 00:00 UTC. Run after that window.
+    - cron: "37 2 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Final number of domains to keep. Use "unlimited" to keep all merged domains.'
+        required: false
+        default: "2000"
+      source_limit:
+        description: 'Rows to read from each source. Use "unlimited" to read full source files.'
+        required: false
+        default: "10000"
+      tranco_size:
+        description: "Tranco download size"
+        required: false
+        type: choice
+        options:
+          - "1000000"
+          - "full"
+        default: "1000000"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-popular-domains
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      POPULAR_DOMAIN_LIMIT: ${{ github.event.inputs.limit || '2000' }}
+      POPULAR_DOMAIN_SOURCE_LIMIT: ${{ github.event.inputs.source_limit || '10000' }}
+      TRANCO_LIST_SIZE: ${{ github.event.inputs.tranco_size || '1000000' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Update generated domain list
+        run: node tools/update-popular-domains.mjs
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automation/update-popular-domains
+          delete-branch: true
+          commit-message: "chore: update popular domains"
+          title: "chore: update popular domains"
+          body: |
+            Automated refresh of the generated `POPULAR_DOMAINS` list in `background.js`.
+
+            Sources:
+            - Tranco latest list
+            - Majestic Million
+            - Cisco Umbrella top 1M
+            - Cloudflare Radar top domains, when `CLOUDFLARE_API_TOKEN` is configured
+          labels: |
+            automation
+            data-update
+          add-paths: |
+            background.js

@@ -124,7 +124,7 @@
       "bg.override.O7.kitMarker":     "Phishing-kit signature ({0}) + credential form.",
       "bg.override.D1.denylistHit":   "Persistent denylist match — previously confirmed phishing host: {0}.",
       "bg.override.O5.personalTrust": "User-trusted domain (bookmarks / history / top sites): {0}",
-      "bg.override.O6.popularKr":     "Popular ranked domain: {0}",
+      "bg.override.O6.popularDomain":     "Popular ranked domain: {0}",
 
       // compat-check page (EN)
       "compat.title":                 "Built-in AI Compatibility Check — Windshock Lens",
@@ -320,7 +320,7 @@
       "bg.override.O7.kitMarker":     "Phishing kit 시그너처 ({0}) + credential 폼",
       "bg.override.D1.denylistHit":   "영구 denylist 일치 — 이전 검사에서 피싱으로 판정된 호스트: {0}",
       "bg.override.O5.personalTrust": "사용자 신뢰 도메인 (즐겨찾기/방문기록/TopSites): {0}",
-      "bg.override.O6.popularKr":     "공개 랭킹 인기 도메인: {0}",
+      "bg.override.O6.popularDomain":     "공개 랭킹 인기 도메인: {0}",
 
       // compat-check page (KO)
       "compat.title":                 "Built-in AI 호환성 진단 — Windshock Lens",

@@ -125,7 +125,7 @@
       "bg.override.O7.kitMarker":     "Phishing-kit signature ({0}) + credential form.",
       "bg.override.D1.denylistHit":   "Persistent denylist match — previously confirmed phishing host: {0}.",
       "bg.override.O5.personalTrust": "User-trusted domain (bookmarks / history / top sites): {0}",
-      "bg.override.O6.popularKr":     "Popular ranked domain: {0}",
+      "bg.override.O6.popularDomain":     "Popular ranked domain: {0}",
       "bg.override.O8.sharedSaas":    "Multi-tenant SaaS platform ({0}); platform WHOIS doesn't prove tenant content is malicious. No hard evidence found.",
       "bg.override.O9.firstPartyInstall": "First-party developer install command: brand '{0}' matches the registered domain ({1}) and the command URL stays on that domain. No hard evidence found.",
       "bg.override.O10.modelConsistency": "Model output was internally inconsistent: phishing=false and the reason says no phishing indicators, but score was high. No hard evidence found.",
@@ -133,6 +133,7 @@
       "bg.override.O12.thirdPartyProviderPage": "Recognized third-party provider page: {0} ({1}). Do not apply source-brand domain mismatch. No hard evidence found.",
       "bg.override.O1infra.match":    "Infrastructure corroboration: WHOIS name server / contact ({1}) matches official domain of '{0}', which the page also identifies. No hard evidence.",
       "bg.override.O13.establishedKr": "Established .kr domain registered to a real organization ('{0}', ~{1}+ yr old) with no hard evidence — treated as legitimate.",
+      "bg.override.O14.brandOwnsDomain": "Brand '{0}' matches its own registered domain (~{1}+ yr old, not impersonating another brand) with no hard evidence — treated as legitimate.",
 
       // compat-check page (EN)
       "compat.title":                 "Built-in AI Compatibility Check — Windshock Lens",
@@ -329,7 +330,7 @@
       "bg.override.O7.kitMarker":     "Phishing kit 시그너처 ({0}) + credential 폼",
       "bg.override.D1.denylistHit":   "영구 denylist 일치 — 이전 검사에서 피싱으로 판정된 호스트: {0}",
       "bg.override.O5.personalTrust": "사용자 신뢰 도메인 (즐겨찾기/방문기록/TopSites): {0}",
-      "bg.override.O6.popularKr":     "공개 랭킹 인기 도메인: {0}",
+      "bg.override.O6.popularDomain":     "공개 랭킹 인기 도메인: {0}",
       "bg.override.O8.sharedSaas":    "멀티테넌트 SaaS 플랫폼({0}) — 플랫폼 WHOIS는 테넌트 콘텐츠 악성 여부를 증명하지 않음. hard evidence 없음.",
       "bg.override.O9.firstPartyInstall": "first-party 개발자 설치 명령: 브랜드 '{0}' 가 등록 도메인({1})과 일치하고 명령 URL도 같은 도메인에 있음. hard evidence 없음.",
       "bg.override.O10.modelConsistency": "모델 출력 자기모순: phishing=false 이고 사유도 피싱 징후 없음인데 점수만 높음. hard evidence 없음.",
@@ -337,6 +338,7 @@
       "bg.override.O12.thirdPartyProviderPage": "공인 제3자 provider 페이지: {0}({1}). source brand 도메인 불일치로 보지 않음. hard evidence 없음.",
       "bg.override.O1infra.match":    "인프라 보강 증거: WHOIS 네임서버/연락처({1})가 '{0}' 공식 도메인과 일치하고 페이지에도 해당 브랜드 명시. hard evidence 없음.",
       "bg.override.O13.establishedKr": "실재 법인('{0}')에 등록된 노후 .kr 도메인(~{1}년+) + hard evidence 없음 — 정상으로 처리.",
+      "bg.override.O14.brandOwnsDomain": "브랜드 '{0}'가 자기 등록도메인과 일치(~{1}년+, 타 브랜드 사칭 아님) + hard evidence 없음 — 정상으로 처리.",
 
       // compat-check page (KO)
       "compat.title":                 "Built-in AI 호환성 진단 — Windshock Lens",

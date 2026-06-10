@@ -27,6 +27,14 @@ See [docs/privacy.md](docs/privacy.md) for the full privacy policy — what data
 
 ---
 
+## 🌍 Popular Domain Updates
+
+`background.js` contains a generated `POPULAR_DOMAINS` list used by the O6 false-positive cap. It is refreshed by `.github/workflows/update-popular-domains.yml` via `tools/update-popular-domains.mjs`.
+
+Default sources are Tranco latest list, Majestic Million, and Cisco Umbrella top 1M. If the repository secret `CLOUDFLARE_API_TOKEN` is configured with Cloudflare Radar read permission, Cloudflare Radar global top domains are also merged. Manual workflow runs can set `limit` or `source_limit` to `unlimited`, and `tranco_size` to `full`, but large generated lists will make `background.js` and the extension service worker heavier.
+
+---
+
 ## ✨ Features
 
 - **On-device LLM**: Page content, URLs, and OCR text are processed only by the local Gemini Nano model. No external LLM API receives your browsing data. Domain-ownership metadata (WHOIS/RDAP/CT) is queried from public services to corroborate brand legitimacy.

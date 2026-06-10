@@ -47,6 +47,33 @@ The deterministic fixture suite was run by the maintainer and passed after these
 
 ---
 
+# Windshock Lens v0.2.8 Release Notes
+
+## 🏷 `O14-brand-owns-domain` — curation-free FP cap (any TLD)
+
+`m.lpoint.com` (Lotte L.POINT, legitimate) was flagged phishing 7/10 — its real-name verification form collects a resident registration number, and the model latched onto weak signals ("the `callback=` query param looks like a phishing tactic", "the `m.` subdomain is suspicious").
+
+Rather than grow `OFFICIAL_DOMAINS` (which doesn't scale against the model's per-run brand naming and the long tail of legitimate sites), v0.2.8 adds a deterministic rule on a verifiable signal: **if the model-identified brand exactly matches the visited host's registered domain label** (`brandMatchesRegisteredDomain` — e.g. brand `Lpoint` ↔ `lpoint.com`), the page is *not impersonating another brand* — which is the essence of phishing. With domain age ≥ 365 days, not on free/shared hosting, and **no other override (danger/warn/safe)**, the score is capped ≤ 3.
+
+- Exact-label match (not substring) → combosquats like `lpoint-verify.com` do **not** match.
+- Age + free-hosting guards reject freshly-registered brandable domains and free-host impersonation.
+- Never overrides an `O1` brand-mismatch warn; hard evidence always wins. `DOMAIN_TRUST_RULES`-excluded (re-evaluated each scan).
+- Complements `O13-established-kr-registrant` (which uses the `.kr` registrant, unavailable for `.com`): `O14` covers any TLD via brand↔domain identity.
+
+## 🌍 Popular-domain list now global + auto-updated
+
+The `O6` popular-domain false-positive cap was Korea-only (`POPULAR_KR_DOMAINS`). It's now a global, generated `POPULAR_DOMAINS` set refreshed by a scheduled GitHub Action:
+
+- `.github/workflows/update-popular-domains.yml` (daily cron + manual dispatch) runs `tools/update-popular-domains.mjs`, merging Tranco, Majestic Million, Cisco Umbrella top-1M, and (if `CLOUDFLARE_API_TOKEN` is set) Cloudflare Radar, then opens a PR editing only `background.js`.
+- `O6` reason key renamed `popularKr` → `popularDomain` (EN/KO).
+- **To activate on GitHub:** enable *Settings → Actions → General → Workflow permissions → "Allow GitHub Actions to create and approve pull requests"* (required for the auto-PR), and optionally add the `CLOUDFLARE_API_TOKEN` repo secret.
+
+## Spec sync (SDD)
+
+`docs/development-spec.md`: FR-041 (`O14-brand-owns-domain`), FR-016 priority list, override table.
+
+---
+
 # Windshock Lens v0.2.7 Release Notes
 
 A debugging-driven release that started from two false positives (`ogog.kr`, `howcare.co.kr`) and surfaced a chain of deeper issues — a dead OCR pipeline, an empty page-body on hidden-tab scans, an unsustainable brand allowlist, a click-guard loop, and LM session churn. Each was verified against live data (Chrome DevTools Protocol, real RDAP/WHOIS, the actual yesnic HTML) rather than assumed. Full fixture suite now passes 22/22.
